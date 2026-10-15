@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbar for dense POS data tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Thermal receipt and label printing specific styling */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Reset modal overlays during print so children are never hidden */
+  .backdrop-blur-xs,
+  .fixed.inset-0 {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Hide app navigation, sidebar, headers, buttons, form controls */
+  header, aside, nav, .no-print, button, input, select, textarea, [data-no-print] {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area-receipt,
+  .print-area-receipt * {
+    visibility: visible !important;
+  }
+
+  .print-area-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    z-index: 99999 !important;
+  }
+
+  .print-area-labels,
+  .print-area-labels * {
+    visibility: visible !important;
+  }
+
+  .print-area-labels {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    z-index: 99999 !important;
+  }
+
+  /* Barcode Label Container - Explicit Print Layout */
+  .barcode-label {
+    width: 48mm !important;
+    height: 23mm !important;
+    min-width: 48mm !important;
+    min-height: 23mm !important;
+    box-sizing: border-box !important;
+    padding: 1mm !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 0.5px solid #d1d5db !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .barcode-label,
+  .barcode-label * {
+    visibility: visible !important;
+    opacity: 1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Store Name explicitly visible as block */
+  .barcode-label .barcode-store,
+  .barcode-label .barcode-label-store,
+  .barcode-label [data-field="store-name"],
+  .barcode-store-name {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #000000 !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    line-height: 1.1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    border-bottom: 0.5px solid #000000 !important;
+    padding-bottom: 0.4mm !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Product Name explicitly visible as block */
+  .barcode-label .barcode-product,
+  .barcode-label .barcode-label-title,
+  .barcode-label [data-field="product-name"],
+  .barcode-product-name {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #000000 !important;
+    font-size: 8.5px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    line-height: 1.15 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin: 0.2mm 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Barcode container wrapper explicitly flex */
+  .barcode-label .barcode-code-wrap,
+  .barcode-label .barcode-label-code-wrap,
+  .barcode-label [data-field="barcode-wrapper"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin: 0.1mm 0 !important;
+    flex-shrink: 0 !important;
+    max-height: 10.5mm !important;
+    overflow: hidden !important;
+  }
+
+  /* Barcode SVG and canvas graphic */
+  .barcode-label svg,
+  .barcode-label svg.barcode,
+  svg.barcode,
+  canvas.barcode {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 90% !important;
+    max-width: 92% !important;
+    max-height: 10.5mm !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    image-rendering: crisp-edges !important;
+    image-rendering: pixelated !important;
+  }
+
+  /* Barcode Numeric Code text explicitly visible */
+  .barcode-label svg text,
+  svg.barcode text,
+  .barcode-label .barcode-number,
+  .barcode-label .barcode-numeric-code,
+  .barcode-numeric-code {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    fill: #000000 !important;
+    color: #000000 !important;
+    font-family: 'JetBrains Mono', monospace, Arial, sans-serif !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    text-anchor: middle !important;
+  }
+
+  /* Prices Row explicitly flex */
+  .barcode-label .barcode-prices,
+  .barcode-label .barcode-label-prices,
+  .barcode-label [data-field="prices-row"],
+  .barcode-prices-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #000000 !important;
+    border-top: 0.5px solid #000000 !important;
+    padding-top: 0.4mm !important;
+    margin-top: 0.2mm !important;
+    line-height: 1.1 !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* MRP and Selling Price text elements explicitly visible */
+  .barcode-label .barcode-mrp,
+  .barcode-label .barcode-label-mrp,
+  .barcode-label [data-field="mrp"],
+  .barcode-mrp {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #333333 !important;
+    text-decoration: line-through !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+  }
+
+  .barcode-label .barcode-selling,
+  .barcode-label .barcode-label-selling,
+  .barcode-label [data-field="selling-price"],
+  .barcode-selling-price {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #000000 !important;
+    font-size: 9.5px !important;
+    font-weight: 800 !important;
+  }
+
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}

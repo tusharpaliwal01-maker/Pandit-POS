@@ -1,0 +1,6 @@
+{
+  "name": "PANDIT POS — Retail Billing & Inventory",
+  "description": "Multi-shop retail POS, inventory, customer Khata ledger, barcode labeling, and Gemini supplier bill OCR.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,682 @@
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Tag,
+  Users,
+  FileText,
+  BarChart3,
+  UserCheck,
+  Settings,
+  ShieldAlert,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Store,
+  LogOut,
+  Scan,
+  Printer,
+  ChevronDown,
+  User as UserIcon,
+  AlertTriangle,
+  Keyboard,
+} from 'lucide-react';
+import { Shop, User, Product, Customer, Invoice } from './types';
+import { StorageService } from './services/storage';
+
+// Views
+import { DashboardView } from './views/DashboardView';
+import { PosBillingView } from './views/PosBillingView';
+import { InventoryView } from './views/InventoryView';
+import { BarcodeLabelsView } from './views/BarcodeLabelsView';
+import { CustomersKhataView } from './views/CustomersKhataView';
+import { InvoicesView } from './views/InvoicesView';
+import { ReportsView } from './views/ReportsView';
+import { StaffView } from './views/StaffView';
+import { SettingsView } from './views/SettingsView';
+import { SupermasterView } from './views/SupermasterView';
+import { SupplierBillOcrView } from './views/SupplierBillOcrView';
+
+// Auth & Modals
+import { LoginView } from './components/auth/LoginView';
+import { KeyboardShortcutsModal } from './components/common/KeyboardShortcutsModal';
+import { GeminiAssistantModal } from './components/assistant/GeminiAssistantModal';
+import { ReceiptModal } from './components/hardware/ReceiptModal';
+import { ScannerTestModal } from './components/hardware/ScannerTestModal';
+import { PrinterTestModal } from './components/hardware/PrinterTestModal';
+
+export default function App() {
+  // Initialize relational storage
+  useEffect(() => {
+    StorageService.init();
+  }, []);
+
+  const [shops, setShops] = useState<Shop[]>(() => StorageService.getShops());
+  const [currentShop, setCurrentShop] = useState<Shop>(() => {
+    const session = StorageService.getCurrentSession();
+    return session?.shop || StorageService.getShops()[0];
+  });
+
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const session = StorageService.getCurrentSession();
+    return session?.user || null;
+  });
+
+  // Global Keyboard Shortcuts Cheat Sheet modal
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+
+  // Global keydown listeners for cashier shortcuts (F4 to start POS, F1 / ? for cheat sheet)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F4') {
+        e.preventDefault();
+        setActiveTab('pos');
+      } else if (
+        e.key === 'F1' ||
+        (e.key === '?' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName))
+      ) {
+        e.preventDefault();
+        setIsShortcutsModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const handleLogout = () => {
+    StorageService.clearSession();
+    setCurrentUser(null);
+  };
+
+  // Data scoped by current shop
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<string>('pos');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
+
+  // Global Modals
+  const [isGeminiChatOpen, setIsGeminiChatOpen] = useState(false);
+  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [isScannerTestOpen, setIsScannerTestOpen] = useState(false);
+  const [isPrinterTestOpen, setIsPrinterTestOpen] = useState(false);
+  const [isLowStockPopoverOpen, setIsLowStockPopoverOpen] = useState(false);
+  const [inventoryFilterLowStock, setInventoryFilterLowStock] = useState(false);
+
+  // Load shop data
+  const refreshShopData = () => {
+    setShops(StorageService.getShops());
+    const liveShop = StorageService.getShopById(currentShop.id) || StorageService.getShops()[0];
+    setCurrentShop(liveShop);
+
+    setProducts(StorageService.getProducts(liveShop.id));
+    setCustomers(StorageService.getCustomers(liveShop.id));
+    setInvoices(StorageService.getInvoices(liveShop.id));
+    setUsers(StorageService.getUsers(liveShop.id));
+  };
+
+  useEffect(() => {
+    refreshShopData();
+  }, [currentShop.id]);
+
+  // Low stock products calculation for persistent notification badge
+  const lowStockProducts = products.filter(
+    (p) => p.active && p.stockQty <= p.lowStockThreshold
+  );
+  const lowStockCount = lowStockProducts.length;
+
+  // Handle switching active shop context
+  const handleSelectShop = (shop: Shop) => {
+    setCurrentShop(shop);
+    if (currentUser) {
+      StorageService.setCurrentSession(currentUser, shop);
+    }
+    setIsShopDropdownOpen(false);
+  };
+
+  // Quick switch role / user account
+  const handleSwitchUser = (targetRole: 'SUPERMASTER' | 'ADMIN' | 'STAFF') => {
+    const allUsers = StorageService.getUsers();
+    let target = allUsers.find((u) => u.role === targetRole);
+    if (!target) {
+      target = {
+        id: `user-${targetRole.toLowerCase()}`,
+        shopId: currentShop.id,
+        username: targetRole.toLowerCase(),
+        fullName: `${targetRole} User`,
+        mobile: '9800000000',
+        role: targetRole,
+        active: true,
+        createdAt: new Date().toISOString(),
+      };
+      StorageService.saveUser(target);
+    }
+
+    setCurrentUser(target);
+    StorageService.setCurrentSession(target, currentShop);
+    setIsRoleDropdownOpen(false);
+
+    // If STAFF, steer away from admin-only pages
+    if (targetRole === 'STAFF' && !['pos', 'customers'].includes(activeTab)) {
+      setActiveTab('pos');
+    }
+  };
+
+  // If no active session exists, display full authentication screen
+  if (!currentUser) {
+    return (
+      <LoginView
+        onLoginSuccess={(user, shop) => {
+          setCurrentUser(user);
+          setCurrentShop(shop);
+          refreshShopData();
+        }}
+      />
+    );
+  }
+
+  // Navigation items based on role
+  const isSupermaster = currentUser.role === 'SUPERMASTER';
+  const isAdmin = currentUser.role === 'ADMIN' || isSupermaster;
+  const isStaff = currentUser.role === 'STAFF';
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: 'ADMIN' },
+    { id: 'pos', label: 'POS Billing', icon: ShoppingCart, role: 'STAFF' },
+    { id: 'inventory', label: 'Inventory & Stock', icon: Package, role: 'ADMIN' },
+    { id: 'ocr-bills', label: 'Supplier Bill OCR', icon: Sparkles, role: 'ADMIN' },
+    { id: 'barcode-labels', label: 'Barcode Labels', icon: Tag, role: 'ADMIN' },
+    { id: 'customers', label: 'Customers & Khata', icon: Users, role: 'STAFF' },
+    { id: 'invoices', label: 'Invoices & Sales', icon: FileText, role: 'ADMIN' },
+    { id: 'reports', label: 'Reports & GST', icon: BarChart3, role: 'ADMIN' },
+    { id: 'staff', label: 'Staff Management', icon: UserCheck, role: 'ADMIN' },
+    { id: 'settings', label: 'Shop Settings', icon: Settings, role: 'ADMIN' },
+  ];
+
+  if (isSupermaster) {
+    navItems.push({
+      id: 'supermaster',
+      label: 'Supermaster Shops',
+      icon: ShieldAlert,
+      role: 'SUPERMASTER',
+    });
+  }
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.role === 'STAFF') return true;
+    if (item.role === 'ADMIN') return isAdmin;
+    if (item.role === 'SUPERMASTER') return isSupermaster;
+    return false;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-900 selection:bg-orange-500 selection:text-white">
+      {/* Top Application Bar */}
+      <header className="h-14 bg-slate-900 text-white border-b border-slate-800 px-4 flex items-center justify-between gap-4 sticky top-0 z-40 select-none">
+        {/* Brand & Toggle */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-orange-600 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-xs">
+              P
+            </div>
+            <span className="font-bold tracking-tight text-base whitespace-nowrap">
+              PANDIT POS
+            </span>
+          </div>
+
+          {/* Shop Switcher */}
+          <div className="relative ml-2 hidden sm:block">
+            <button
+              onClick={() => setIsShopDropdownOpen(!isShopDropdownOpen)}
+              className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 transition-colors"
+            >
+              <Store className="w-3.5 h-3.5 text-orange-400" />
+              <span className="truncate max-w-[180px]">{currentShop.name}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {isShopDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-xl py-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Select Active Shop
+                </div>
+                {shops.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSelectShop(s)}
+                    className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                      s.id === currentShop.id
+                        ? 'bg-orange-600/20 text-orange-400 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="truncate">{s.name}</span>
+                    <span className="font-mono text-[10px] text-slate-500">{s.code}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Center / Right Controls */}
+        <div className="flex items-center gap-2.5">
+          {/* Persistent Low Stock Notification Badge */}
+          {lowStockCount > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setIsLowStockPopoverOpen(!isLowStockPopoverOpen)}
+                title={`${lowStockCount} products are below the minimum stock alert threshold`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 rounded-lg text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-xs"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
+                <span className="font-mono font-bold text-amber-200">{lowStockCount}</span>
+                <span className="hidden sm:inline font-sans text-[11px] text-amber-300">
+                  Low Stock
+                </span>
+              </button>
+
+              {/* Low Stock Popover / Quick Restock List */}
+              {isLowStockPopoverOpen && (
+                <div className="absolute right-0 sm:left-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-2 text-xs z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3.5 py-2 border-b border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-400 text-xs uppercase tracking-wider">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Low Stock Alert ({lowStockCount})</span>
+                    </div>
+                    <button
+                      onClick={() => setIsLowStockPopoverOpen(false)}
+                      className="text-slate-400 hover:text-white p-0.5 text-sm"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-slate-800/80 max-h-56 overflow-y-auto px-1 py-1">
+                    {lowStockProducts.map((p) => {
+                      const isOut = p.stockQty <= 0;
+                      return (
+                        <div
+                          key={p.id}
+                          className="px-3 py-2 flex items-center justify-between text-xs hover:bg-slate-800/60 rounded-lg transition-colors"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-semibold text-slate-200 truncate">{p.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              Min Threshold: {p.lowStockThreshold} {p.unit}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span
+                              className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
+                                isOut
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}
+                            >
+                              {p.stockQty} {p.unit}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-2 border-t border-slate-800 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setInventoryFilterLowStock(true);
+                        setActiveTab('inventory');
+                        setIsLowStockPopoverOpen(false);
+                      }}
+                      className="flex-1 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold text-center transition-colors"
+                    >
+                      Open in Inventory
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('ocr-bills');
+                        setIsLowStockPopoverOpen(false);
+                      }}
+                      className="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium text-center transition-colors"
+                    >
+                      OCR Restock
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Quick Hardware shortcuts */}
+          <button
+            onClick={() => setIsScannerTestOpen(true)}
+            title="Handheld Barcode Gun Test"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden md:flex items-center gap-1.5 text-xs"
+          >
+            <Scan className="w-4 h-4 text-orange-400" />
+            <span className="text-slate-300">Scanner</span>
+          </button>
+
+          <button
+            onClick={() => setIsPrinterTestOpen(true)}
+            title="RETSOL RTP82 & TSC TE244 Hardware Printer Station"
+            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden md:flex items-center gap-1.5 text-xs"
+          >
+            <Printer className="w-4 h-4 text-orange-400" />
+            <span className="text-slate-200 font-medium">Printers (RETSOL / TSC)</span>
+          </button>
+
+          {/* Keyboard Shortcuts Trigger Button */}
+          <button
+            onClick={() => setIsShortcutsModalOpen(true)}
+            title="Cashier Keyboard Shortcuts Cheat Sheet (F1, F2, F3, F4)"
+            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden sm:flex items-center gap-1.5 text-xs cursor-pointer"
+          >
+            <Keyboard className="w-4 h-4 text-orange-400" />
+            <span className="text-slate-200 font-medium">Shortcuts</span>
+          </button>
+
+          {/* Gemini AI Retail Assistant Launcher */}
+          <button
+            onClick={() => setIsGeminiChatOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Ask Pandit AI</span>
+          </button>
+
+          {/* User & Role Switcher */}
+          <div className="relative">
+            <button
+              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+              className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 transition-colors cursor-pointer"
+            >
+              <div className="w-6 h-6 rounded-md bg-orange-600/30 text-orange-400 flex items-center justify-center font-bold text-xs">
+                {currentUser.username[0].toUpperCase()}
+              </div>
+              <div className="text-left hidden sm:block">
+                <div className="text-xs font-bold leading-none">{currentUser.fullName}</div>
+                <div className="text-[10px] text-orange-400 font-mono leading-none mt-0.5">
+                  {currentUser.role}
+                </div>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {isRoleDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-xl py-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Quick Switch Role
+                </div>
+
+                <button
+                  onClick={() => handleSwitchUser('SUPERMASTER')}
+                  className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                    currentUser.role === 'SUPERMASTER'
+                      ? 'bg-orange-600/20 text-orange-400 font-bold'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>SUPERMASTER</span>
+                  <span className="text-[10px] text-slate-500">Platform Admin</span>
+                </button>
+
+                <button
+                  onClick={() => handleSwitchUser('ADMIN')}
+                  className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                    currentUser.role === 'ADMIN'
+                      ? 'bg-orange-600/20 text-orange-400 font-bold'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>ADMIN (Shop Manager)</span>
+                  <span className="text-[10px] text-slate-500">Store Boss</span>
+                </button>
+
+                <button
+                  onClick={() => handleSwitchUser('STAFF')}
+                  className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                    currentUser.role === 'STAFF'
+                      ? 'bg-orange-600/20 text-orange-400 font-bold'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>STAFF (Cashier)</span>
+                  <span className="text-[10px] text-slate-500">POS &amp; Khata</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Prominent Logout Button */}
+          <button
+            onClick={handleLogout}
+            title="Sign out / Switch account"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 hover:border-rose-600 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs active:scale-95"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Main Workspace with Sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Collapsible Sidebar */}
+        <aside
+          className={`bg-slate-900 text-slate-300 border-r border-slate-800 transition-all duration-200 shrink-0 flex flex-col justify-between ${
+            sidebarCollapsed ? 'w-16' : 'w-60'
+          }`}
+        >
+          {/* Navigation Links */}
+          <nav className="p-2 space-y-1 overflow-y-auto">
+            {visibleNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors group relative ${
+                    isActive
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/80'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'}`} />
+                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+
+                  {sidebarCollapsed && (
+                    <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+                      {item.label}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Sidebar Footer info */}
+          <div className="p-3 border-t border-slate-800 text-xs">
+            {!sidebarCollapsed ? (
+              <div className="space-y-1.5">
+                <div className="text-[11px] text-slate-400 truncate">
+                  Logged in as <strong className="text-slate-200">{currentUser.fullName}</strong>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                  <span>Role: {currentUser.role}</span>
+                  <span className="text-emerald-500">Online</span>
+                </div>
+
+                {/* Keyboard Shortcuts Trigger Button */}
+                <button
+                  onClick={() => setIsShortcutsModalOpen(true)}
+                  className="w-full mt-2 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Keyboard className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Shortcuts (F2, F3, F4)</span>
+                </button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <button
+                  onClick={() => setIsShortcutsModalOpen(true)}
+                  title="Keyboard Shortcuts (F1, F2, F3, F4)"
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg mx-auto block cursor-pointer"
+                >
+                  <Keyboard className="w-4 h-4 text-orange-400" />
+                </button>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Main Content Viewport */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-100">
+          <div className="max-w-7xl mx-auto">
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                shop={currentShop}
+                invoices={invoices}
+                products={products}
+                customers={customers}
+                onNavigate={setActiveTab}
+                onOpenReceipt={setPreviewInvoice}
+              />
+            )}
+
+            {activeTab === 'pos' && (
+              <PosBillingView
+                shop={currentShop}
+                products={products}
+                customers={customers}
+                cashierName={currentUser.fullName}
+                userId={currentUser.id}
+                onRefreshData={refreshShopData}
+              />
+            )}
+
+            {activeTab === 'inventory' && (
+              <InventoryView
+                shop={currentShop}
+                products={products}
+                onRefreshData={refreshShopData}
+                onNavigateToLabels={() => setActiveTab('barcode-labels')}
+                initialOnlyLowStock={inventoryFilterLowStock}
+              />
+            )}
+
+            {activeTab === 'ocr-bills' && (
+              <SupplierBillOcrView
+                shop={currentShop}
+                products={products}
+                onRefreshData={refreshShopData}
+              />
+            )}
+
+            {activeTab === 'barcode-labels' && (
+              <BarcodeLabelsView products={products} shop={currentShop} />
+            )}
+
+            {activeTab === 'customers' && (
+              <CustomersKhataView
+                shop={currentShop}
+                customers={customers}
+                invoices={invoices}
+                onRefreshData={refreshShopData}
+              />
+            )}
+
+            {activeTab === 'invoices' && (
+              <InvoicesView shop={currentShop} invoices={invoices} />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportsView
+                shop={currentShop}
+                invoices={invoices}
+                products={products}
+                customers={customers}
+              />
+            )}
+
+            {activeTab === 'staff' && (
+              <StaffView
+                shop={currentShop}
+                users={users}
+                currentUserId={currentUser.id}
+                onRefreshData={refreshShopData}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsView shop={currentShop} onRefreshData={refreshShopData} />
+            )}
+
+            {activeTab === 'supermaster' && (
+              <SupermasterView
+                currentShop={currentShop}
+                shops={shops}
+                onSelectShop={handleSelectShop}
+                onRefreshData={refreshShopData}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Global Modals */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+        onTriggerAction={(action) => {
+          if (['pos', 'checkout', 'search', 'clear', 'customer'].includes(action)) {
+            setActiveTab('pos');
+          }
+        }}
+      />
+
+      <GeminiAssistantModal
+        isOpen={isGeminiChatOpen}
+        onClose={() => setIsGeminiChatOpen(false)}
+        shop={currentShop}
+        products={products}
+        customers={customers}
+      />
+
+      <ReceiptModal
+        isOpen={!!previewInvoice}
+        onClose={() => setPreviewInvoice(null)}
+        invoice={previewInvoice}
+        shop={currentShop}
+      />
+
+      <ScannerTestModal
+        isOpen={isScannerTestOpen}
+        onClose={() => setIsScannerTestOpen(false)}
+      />
+
+      <PrinterTestModal
+        isOpen={isPrinterTestOpen}
+        onClose={() => setIsPrinterTestOpen(false)}
+        shop={currentShop}
+      />
+    </div>
+  );
+}
