@@ -22,6 +22,7 @@ import {
   User as UserIcon,
   AlertTriangle,
   Keyboard,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Shop, User, Product, Customer, Invoice } from './types';
 import { StorageService } from './services/storage';
@@ -38,6 +39,7 @@ import { StaffView } from './views/StaffView';
 import { SettingsView } from './views/SettingsView';
 import { SupermasterView } from './views/SupermasterView';
 import { SupplierBillOcrView } from './views/SupplierBillOcrView';
+import { GoogleSheetsView } from './views/GoogleSheetsView';
 
 // Auth & Modals
 import { LoginView } from './components/auth/LoginView';
@@ -196,6 +198,7 @@ export default function App() {
     { id: 'customers', label: 'Customers & Khata', icon: Users, role: 'STAFF' },
     { id: 'invoices', label: 'Invoices & Sales', icon: FileText, role: 'ADMIN' },
     { id: 'reports', label: 'Reports & GST', icon: BarChart3, role: 'ADMIN' },
+    { id: 'google-sheets', label: 'Google Sheets™', icon: FileSpreadsheet, role: 'STAFF' },
     { id: 'staff', label: 'Staff Management', icon: UserCheck, role: 'ADMIN' },
     { id: 'settings', label: 'Shop Settings', icon: Settings, role: 'ADMIN' },
   ];
@@ -379,6 +382,16 @@ export default function App() {
           >
             <Printer className="w-4 h-4 text-orange-400" />
             <span className="text-slate-200 font-medium">Printers (RETSOL / TSC)</span>
+          </button>
+
+          {/* Google Sheets Live Sync Launcher */}
+          <button
+            onClick={() => setActiveTab('google-sheets')}
+            title="Google Sheets Live Sync & Cloud Export"
+            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden lg:flex items-center gap-1.5 text-xs cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span className="text-slate-200 font-medium">Google Sheets</span>
           </button>
 
           {/* Keyboard Shortcuts Trigger Button */}
@@ -578,6 +591,7 @@ export default function App() {
                 products={products}
                 onRefreshData={refreshShopData}
                 onNavigateToLabels={() => setActiveTab('barcode-labels')}
+                onNavigateToSheets={() => setActiveTab('google-sheets')}
                 initialOnlyLowStock={inventoryFilterLowStock}
               />
             )}
@@ -613,6 +627,17 @@ export default function App() {
                 invoices={invoices}
                 products={products}
                 customers={customers}
+                onNavigateToSheets={() => setActiveTab('google-sheets')}
+              />
+            )}
+
+            {activeTab === 'google-sheets' && (
+              <GoogleSheetsView
+                shop={currentShop}
+                products={products}
+                invoices={invoices}
+                customers={customers}
+                onRefreshData={refreshShopData}
               />
             )}
 

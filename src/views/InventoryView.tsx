@@ -16,6 +16,7 @@ import {
   TrendingDown,
   Percent,
   ArrowUpDown,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Product, Shop } from '../types';
 import { StorageService } from '../services/storage';
@@ -48,6 +49,7 @@ interface InventoryViewProps {
   products: Product[];
   onRefreshData: () => void;
   onNavigateToLabels?: () => void;
+  onNavigateToSheets?: () => void;
   initialOnlyLowStock?: boolean;
 }
 
@@ -56,6 +58,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   products,
   onRefreshData,
   onNavigateToLabels,
+  onNavigateToSheets,
   initialOnlyLowStock = false,
 }) => {
   const [search, setSearch] = useState('');
@@ -245,6 +248,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {onNavigateToSheets && (
+            <button
+              onClick={onNavigateToSheets}
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>Google Sheets Sync</span>
+            </button>
+          )}
+
           {onNavigateToLabels && (
             <button
               onClick={onNavigateToLabels}

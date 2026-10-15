@@ -27,6 +27,7 @@ interface ReportsViewProps {
   invoices: Invoice[];
   products: Product[];
   customers?: Customer[];
+  onNavigateToSheets?: () => void;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
@@ -34,6 +35,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   invoices,
   products,
   customers: propCustomers,
+  onNavigateToSheets,
 }) => {
   // Active Report Subtab
   const [reportType, setReportType] = useState<
@@ -608,6 +610,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onNavigateToSheets && (
+            <button
+              onClick={onNavigateToSheets}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
+              <span>Google Sheets™ Sync</span>
+            </button>
+          )}
+
           <button
             onClick={handleExportExcel}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
