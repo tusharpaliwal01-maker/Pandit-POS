@@ -32,7 +32,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
     setFullName('');
     setMobile('');
     setRole('STAFF');
-    setPassword('123456');
+    setPassword('');
     setError(null);
     setIsAddOpen(true);
   };
@@ -52,19 +52,38 @@ export const StaffView: React.FC<StaffViewProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!username.trim() || !mobile.trim()) {
-      setError('Username and mobile are required.');
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanFullName = fullName.trim() || cleanUsername;
+    const cleanMobile = mobile.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername || !cleanMobile) {
+      setError('Username and mobile number are required.');
+      return;
+    }
+
+    // Enforce unique individual username across all users
+    const isAvailable = StorageService.isUsernameAvailable(cleanUsername, editingUser?.id);
+    if (!isAvailable) {
+      setError(`Username "${cleanUsername}" is already taken. Every user must have a unique individual username.`);
+      return;
+    }
+
+    // Enforce individual password on account creation
+    if (!editingUser && (!cleanPassword || cleanPassword.length < 4)) {
+      setError('A unique individual password of at least 4 characters is mandatory.');
       return;
     }
 
     const newUser: User = {
       id: editingUser ? editingUser.id : `user-${Date.now()}`,
       shopId: shop.id,
-      username: username.trim().toLowerCase(),
-      fullName: fullName.trim() || username.trim(),
-      mobile: mobile.trim(),
+      username: cleanUsername,
+      password: cleanPassword ? cleanPassword : (editingUser?.password || 'staff123'),
+      fullName: cleanFullName,
+      mobile: cleanMobile,
       role,
-      active: true,
+      active: editingUser ? editingUser.active : true,
       createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
     };
 
@@ -104,7 +123,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
             <span>Staff Accounts &amp; Cashier Logins</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Manage cashier POS access, supervisor authorizations, and role permissions.
+            Manage individual cashier POS credentials, unique operator usernames, and passwords. Role-switching without credentials is disabled.
           </p>
         </div>
 
@@ -113,7 +132,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
           className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Staff Member</span>
+          <span>Add Individual Account</span>
         </button>
       </div>
 
@@ -122,8 +141,9 @@ export const StaffView: React.FC<StaffViewProps> = ({
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase">
             <tr>
-              <th className="py-3 px-4">Staff Name &amp; Username</th>
-              <th className="py-3 px-3">Mobile Number</th>
+              <th className="py-3 px-4">Staff Member</th>
+              <th className="py-3 px-3">Unique Username</th>
+              <th className="py-3 px-3">Mobile Contact</th>
               <th className="py-3 px-3">Assigned Role</th>
               <th className="py-3 px-3">Status</th>
               <th className="py-3 px-3">Created Date</th>
@@ -135,7 +155,15 @@ export const StaffView: React.FC<StaffViewProps> = ({
               <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                 <td className="py-3 px-4">
                   <div className="font-semibold text-slate-900">{u.fullName}</div>
-                  <div className="text-[11px] font-mono text-slate-500">@{u.username}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {u.id === currentUserId ? '(Current Terminal Session)' : ''}
+                  </div>
+                </td>
+
+                <td className="py-3 px-3">
+                  <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                    @{u.username}
+                  </span>
                 </td>
 
                 <td className="py-3 px-3 font-mono text-slate-600">{u.mobile}</td>
@@ -187,7 +215,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                       onClick={() => handleOpenEdit(u)}
                       className="text-xs text-orange-600 hover:text-orange-700 font-medium"
                     >
-                      Edit
+                      Edit / Set Password
                     </button>
                     {u.id !== currentUserId && (
                       <>
@@ -286,20 +314,24 @@ export const StaffView: React.FC<StaffViewProps> = ({
                 </select>
               </div>
 
-              {!editingUser && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Default Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Default: 123456"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:bg-white focus:border-orange-500"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  {editingUser
+                    ? 'New Individual Password (leave blank to keep existing password)'
+                    : 'Individual Password * (Mandatory)'}
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={editingUser ? 'Enter new password or leave blank' : 'Minimum 4 characters'}
+                  required={!editingUser}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:bg-white focus:border-orange-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Each user must log in using their own unique credentials.
+                </span>
+              </div>
 
               <div className="pt-2 flex justify-end gap-2">
                 <button

@@ -1049,11 +1049,24 @@ export class StorageService {
   }
 
   static setCurrentSession(user: User, shop: Shop): void {
-    save(STORAGE_KEYS.CURRENT_SESSION, { user, shop });
+    save(STORAGE_KEYS.CURRENT_SESSION, {
+      user,
+      shop,
+      loginTime: new Date().toISOString(),
+      sessionToken: `session-${user.id}-${Date.now()}`,
+    });
   }
 
   static clearSession(): void {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION);
+  }
+
+  static isUsernameAvailable(username: string, excludeUserId?: string): boolean {
+    const clean = username.trim().toLowerCase();
+    if (!clean) return false;
+    return !this.getUsers().some(
+      (u) => u.username.toLowerCase() === clean && u.id !== excludeUserId
+    );
   }
 
   static authenticate(
@@ -1064,7 +1077,7 @@ export class StorageService {
     const password = passwordInput.trim();
 
     if (!username || !password) {
-      return { success: false, error: 'Please enter both username and password' };
+      return { success: false, error: 'Please enter both your individual username and password.' };
     }
 
     const users = this.getUsers();
@@ -1082,7 +1095,7 @@ export class StorageService {
       return { success: true, user: u, shop: s };
     }
 
-    // 2. Lookup existing user in storage
+    // 2. Lookup existing user in storage by username or registered mobile
     const matchedUser = users.find(
       (u) => u.username.toLowerCase() === username || u.mobile === username
     );
@@ -1090,18 +1103,18 @@ export class StorageService {
     if (!matchedUser) {
       return {
         success: false,
-        error: 'Invalid username. Please check credentials or use Quick Switch.',
+        error: 'Invalid username. Please sign in with your individual assigned credentials.',
       };
     }
 
     if (!matchedUser.active) {
       return {
         success: false,
-        error: 'Account has been deactivated. Contact the Supermaster.',
+        error: 'Account has been deactivated. Please contact your Store Administrator.',
       };
     }
 
-    // 3. Password Verification
+    // 3. Strict Individual Password Verification
     let isPasswordValid = false;
     if (matchedUser.password && matchedUser.password === password) {
       isPasswordValid = true;
@@ -1114,7 +1127,10 @@ export class StorageService {
     }
 
     if (!isPasswordValid) {
-      return { success: false, error: 'Incorrect password. Please verify and try again.' };
+      return {
+        success: false,
+        error: `Incorrect password for user "${matchedUser.username}". Please verify your credentials.`,
+      };
     }
 
     const shop = this.getShopById(matchedUser.shopId) || this.getShops()[0];
