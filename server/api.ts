@@ -1,8 +1,57 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import express, { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DATA_DIR = path.join(__dirname, 'data');
+const DB_FILE = path.join(DATA_DIR, 'store_db.json');
+
+// Ensure server data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 export const apiRouter = express.Router();
 apiRouter.use(express.json({ limit: '25mb' }));
+
+/**
+ * GET /api/storage/state
+ * Retrieve persistent database snapshot from server disk
+ */
+apiRouter.get('/storage/state', (_req: Request, res: Response) => {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const content = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(content);
+      return res.json({ success: true, data });
+    }
+    return res.json({ success: false, data: null });
+  } catch (err: any) {
+    console.error('Failed to read server database file:', err);
+    return res.status(500).json({ error: 'Failed to read server database', details: err?.message });
+  }
+});
+
+/**
+ * POST /api/storage/state
+ * Persist database snapshot permanently to server disk
+ */
+apiRouter.post('/storage/state', (req: Request, res: Response) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'Invalid payload' });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    return res.json({ success: true, savedAt: new Date().toISOString() });
+  } catch (err: any) {
+    console.error('Failed to write server database file:', err);
+    return res.status(500).json({ error: 'Failed to save database to disk', details: err?.message });
+  }
+});
 
 function getGeminiClient(): GoogleGenAI {
   return new GoogleGenAI({

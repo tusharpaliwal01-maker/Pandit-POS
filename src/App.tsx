@@ -208,6 +208,12 @@ export default function App() {
 
   useEffect(() => {
     refreshShopData();
+
+    const handleHydrated = () => {
+      refreshShopData();
+    };
+    window.addEventListener('pandit-store-hydrated', handleHydrated);
+    return () => window.removeEventListener('pandit-store-hydrated', handleHydrated);
   }, [currentShop.id]);
 
   // Low stock products calculation for persistent notification badge

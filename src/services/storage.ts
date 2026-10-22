@@ -123,10 +123,41 @@ function load<T>(key: string, fallback: T): T {
   }
 }
 
-// Helper to safely save to LocalStorage
+let diskSyncTimer: any = null;
+
+export function scheduleServerDiskSync() {
+  if (typeof window === 'undefined') return;
+  if (diskSyncTimer) clearTimeout(diskSyncTimer);
+  diskSyncTimer = setTimeout(() => {
+    try {
+      const payload = {
+        shops: load(STORAGE_KEYS.SHOPS, []),
+        users: load(STORAGE_KEYS.USERS, []),
+        products: load(STORAGE_KEYS.PRODUCTS, []),
+        customers: load(STORAGE_KEYS.CUSTOMERS, []),
+        invoices: load(STORAGE_KEYS.INVOICES, []),
+        khataEntries: load(STORAGE_KEYS.KHATA_ENTRIES, []),
+        categories: load(STORAGE_KEYS.CATEGORIES, []),
+        hardwareConfig: load(STORAGE_KEYS.HARDWARE_CONFIG, {}),
+        connectedGoogleSheet: load(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, null),
+        savedAt: new Date().toISOString(),
+      };
+      fetch('/api/storage/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch((e) => console.warn('Disk sync background warning:', e?.message));
+    } catch (err) {
+      console.warn('Failed to schedule disk sync:', err);
+    }
+  }, 250);
+}
+
+// Helper to safely save to LocalStorage and trigger permanent disk sync
 function save<T>(key: string, data: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(data));
+    scheduleServerDiskSync();
   } catch (err) {
     console.error(`Error saving ${key} to storage:`, err);
   }
@@ -194,6 +225,33 @@ export class StorageService {
         users.unshift(SEED_USERS[0]);
         save(STORAGE_KEYS.USERS, users);
       }
+    }
+
+    // Hydrate from permanent server disk storage if local records are empty
+    if (typeof window !== 'undefined') {
+      fetch('/api/storage/state')
+        .then((r) => r.json())
+        .then((res) => {
+          if (res && res.success && res.data) {
+            const serverData = res.data;
+            const localProducts = load<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+            if (
+              localProducts.length === 0 &&
+              Array.isArray(serverData.products) &&
+              serverData.products.length > 0
+            ) {
+              if (serverData.shops?.length) save(STORAGE_KEYS.SHOPS, serverData.shops);
+              if (serverData.products?.length) save(STORAGE_KEYS.PRODUCTS, serverData.products);
+              if (serverData.customers?.length) save(STORAGE_KEYS.CUSTOMERS, serverData.customers);
+              if (serverData.invoices?.length) save(STORAGE_KEYS.INVOICES, serverData.invoices);
+              if (serverData.khataEntries?.length) save(STORAGE_KEYS.KHATA_ENTRIES, serverData.khataEntries);
+              if (serverData.categories?.length) save(STORAGE_KEYS.CATEGORIES, serverData.categories);
+              if (serverData.connectedGoogleSheet) save(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, serverData.connectedGoogleSheet);
+              window.dispatchEvent(new CustomEvent('pandit-store-hydrated'));
+            }
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -346,6 +404,9 @@ export class StorageService {
       shops.push(shop);
     }
     save(STORAGE_KEYS.SHOPS, shops);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-shop-saved', { detail: shop }));
+    }
 
     // Ensure initial categories exist for this new shop branch so billing works instantly
     const existingCats = this.getCategories(shop.id);
@@ -397,6 +458,9 @@ export class StorageService {
       }
     }
     save(STORAGE_KEYS.USERS, users);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-user-saved', { detail: cleanUser }));
+    }
   }
 
   static deleteUser(userId: string): void {
@@ -480,6 +544,9 @@ export class StorageService {
       customers.push(customer);
     }
     save(STORAGE_KEYS.CUSTOMERS, customers);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-customer-saved', { detail: customer }));
+    }
   }
 
   // --- Invoices & Checkout Transaction ---
@@ -497,6 +564,9 @@ export class StorageService {
       invoices.push(invoice);
     }
     save(STORAGE_KEYS.INVOICES, invoices);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-invoice-saved', { detail: invoice }));
+    }
     return invoice;
   }
 
@@ -652,6 +722,10 @@ export class StorageService {
       }
     }
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-invoice-saved', { detail: newInvoice }));
+    }
+
     return { success: true, invoice: newInvoice };
   }
 
@@ -693,6 +767,9 @@ export class StorageService {
     const balanceAfter = Math.max(0, balanceBefore - amount);
     customer.khataBalance = balanceAfter;
     save(STORAGE_KEYS.CUSTOMERS, customers);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-customer-saved', { detail: customer }));
+    }
 
     const allKhata = load<KhataEntry[]>(STORAGE_KEYS.KHATA_ENTRIES, SEED_KHATA_ENTRIES);
     allKhata.unshift({

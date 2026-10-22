@@ -8,20 +8,8 @@ service cloud.firestore {
     }
 
     // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
     }
 
     // Diagnostics & Connection Test Document
@@ -31,34 +19,27 @@ service cloud.firestore {
 
     // Retail Store & Branch Locations
     match /shops/{shopId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidId(shopId);
+      allow read, write: if isValidId(shopId);
     }
 
     // Inventory & Stock Catalog
     match /products/{productId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isValidId(productId);
+      allow read, write: if isValidId(productId);
     }
 
     // Customers & Khata Ledger
     match /customers/{customerId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isValidId(customerId);
+      allow read, write: if isValidId(customerId);
     }
 
     // Point of Sale Invoices & Receipts
     match /invoices/{invoiceId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(invoiceId);
-      allow update, delete: if isSignedIn() && isValidId(invoiceId);
+      allow read, write: if isValidId(invoiceId);
     }
 
     // System Operators & Staff
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(userId);
-      allow delete: if isSignedIn() && isValidId(userId);
+      allow read, write: if isValidId(userId);
     }
   }
 }
