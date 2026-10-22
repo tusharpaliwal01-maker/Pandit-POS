@@ -58,6 +58,7 @@ import { ScannerTestModal } from './components/hardware/ScannerTestModal';
 import { CameraScannerModal } from './components/hardware/CameraScannerModal';
 import { PrinterTestModal } from './components/hardware/PrinterTestModal';
 import { initRealtimeInventoryAutoSync } from './services/googleSheetsService';
+import { initFirebaseAutoSync } from './services/firebaseSync';
 
 export default function App() {
   // Initialize relational storage
@@ -134,9 +135,10 @@ export default function App() {
     spreadsheetName?: string;
   } | null>(null);
 
-  // Initialize background real-time inventory auto-sync to connected Google Sheet
+  // Initialize background real-time auto-sync to connected Google Sheet and Firebase Firestore
   useEffect(() => {
     const unsubscribeAutoSync = initRealtimeInventoryAutoSync();
+    const unsubscribeFirebase = initFirebaseAutoSync();
 
     const handleAutoSynced = (e: any) => {
       const detail = e.detail;
@@ -157,6 +159,7 @@ export default function App() {
 
     return () => {
       unsubscribeAutoSync();
+      unsubscribeFirebase();
       window.removeEventListener('google-sheet-auto-synced', handleAutoSynced);
     };
   }, []);

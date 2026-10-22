@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Settings,
   Save,
@@ -21,10 +21,26 @@ import {
   Clock,
   Layers,
   FileSpreadsheet,
+  Flame,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  Key,
+  Copy,
+  Check,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Shop, BackupData } from '../types';
 import { StorageService } from '../services/storage';
+import {
+  firebaseConfig,
+  testFirebaseConnection,
+  auth,
+  signInWithFirebaseGoogle,
+  signOutFirebase,
+} from '../services/firebase';
+import { pushAllToFirestore, pullAllFromFirestore } from '../services/firebaseSync';
 
 interface SettingsViewProps {
   shop: Shop;
@@ -70,6 +86,134 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ shop, onRefreshData 
   } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Firebase Firestore State & Handlers
+  const [firebaseAuthUser, setFirebaseAuthUser] = useState<any>(() => auth.currentUser);
+  const [isFirebaseLoggingIn, setIsFirebaseLoggingIn] = useState(false);
+  const [firebaseTesting, setFirebaseTesting] = useState(false);
+  const [firebaseTestResult, setFirebaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [firebaseSyncing, setFirebaseSyncing] = useState<'push' | 'pull' | null>(null);
+  const [firebaseSyncResult, setFirebaseSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showConfigGuide, setShowConfigGuide] = useState(false);
+  const [copiedKeys, setCopiedKeys] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseAuthUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleFirebaseLogin = async () => {
+    setIsFirebaseLoggingIn(true);
+    setFirebaseSyncResult(null);
+    try {
+      const userCred = await signInWithFirebaseGoogle();
+      setFirebaseSyncResult({
+        success: true,
+        message: `Authenticated as ${userCred.user.displayName || userCred.user.email} with Google! You can now sync with Firestore.`,
+      });
+    } catch (err: any) {
+      setFirebaseSyncResult({
+        success: false,
+        message: `Google Authentication error: ${err?.message || 'Login cancelled or popup blocked.'}`,
+      });
+    } finally {
+      setIsFirebaseLoggingIn(false);
+    }
+  };
+
+  const handleFirebaseLogout = async () => {
+    await signOutFirebase();
+    setFirebaseSyncResult({
+      success: true,
+      message: 'Signed out of Google Firebase account.',
+    });
+  };
+
+  const handleTestFirebase = async () => {
+    setFirebaseTesting(true);
+    setFirebaseTestResult(null);
+    try {
+      const res = await testFirebaseConnection();
+      setFirebaseTestResult(res);
+    } catch (err: any) {
+      setFirebaseTestResult({
+        success: false,
+        message: err?.message || 'Connection test failed',
+      });
+    } finally {
+      setFirebaseTesting(false);
+    }
+  };
+
+  const handlePushToFirebase = async () => {
+    setFirebaseSyncing('push');
+    setFirebaseSyncResult(null);
+    try {
+      const prods = StorageService.getProducts(shop.id);
+      const custs = StorageService.getCustomers(shop.id);
+      const invs = StorageService.getInvoices(shop.id);
+      const res = await pushAllToFirestore(shop, prods, custs, invs);
+      setFirebaseSyncResult({
+        success: true,
+        message: `Cloud backup complete! Uploaded ${res.productsCount} products, ${res.customersCount} customers, and ${res.invoicesCount} invoices to Firestore.`,
+      });
+    } catch (err: any) {
+      setFirebaseSyncResult({
+        success: false,
+        message: `Upload to Firebase failed: ${err?.message || 'Unknown error'}`,
+      });
+    } finally {
+      setFirebaseSyncing(null);
+    }
+  };
+
+  const handlePullFromFirebase = async () => {
+    setFirebaseSyncing('pull');
+    setFirebaseSyncResult(null);
+    try {
+      const res = await pullAllFromFirestore(shop.id);
+      if (res.products.length === 0 && res.customers.length === 0 && res.invoices.length === 0) {
+        setFirebaseSyncResult({
+          success: true,
+          message: 'No remote records found in Firestore for this shop yet. Use "Push Store to Firestore" first.',
+        });
+        return;
+      }
+
+      for (const p of res.products) {
+        StorageService.saveProduct(p);
+      }
+      for (const c of res.customers) {
+        StorageService.saveCustomer(c);
+      }
+      for (const inv of res.invoices) {
+        StorageService.saveInvoice(inv);
+      }
+
+      onRefreshData();
+      refreshSummary();
+      setFirebaseSyncResult({
+        success: true,
+        message: `Cloud restore complete! Restored ${res.products.length} products, ${res.customers.length} customers, and ${res.invoices.length} invoices from Firestore.`,
+      });
+    } catch (err: any) {
+      setFirebaseSyncResult({
+        success: false,
+        message: `Restore from Firebase failed: ${err?.message || 'Unknown error'}`,
+      });
+    } finally {
+      setFirebaseSyncing(null);
+    }
+  };
+
+  const handleCopyConfigTemplate = () => {
+    const jsonStr = JSON.stringify(firebaseConfig, null, 2);
+    navigator.clipboard.writeText(jsonStr);
+    setCopiedKeys(true);
+    setTimeout(() => setCopiedKeys(false), 2500);
+  };
 
   const refreshSummary = () => {
     setDbSummary(StorageService.getDatabaseSummary());
@@ -362,6 +506,304 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ shop, onRefreshData 
           </button>
         </div>
       </form>
+
+      {/* ========================================================= */}
+      {/* FIREBASE FIRESTORE CLOUD DATABASE & CONFIGURATION KEYS */}
+      {/* ========================================================= */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        {/* Section Header */}
+        <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500/15 text-amber-600 rounded-xl border border-amber-500/20">
+              <Flame className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">
+                  Firebase Firestore Cloud Database
+                </h3>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full flex items-center gap-1 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Active &amp; Connected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Cloud persistence and multi-device database sync powered by Google Cloud Firestore.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestFirebase}
+              disabled={firebaseTesting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${firebaseTesting ? 'animate-spin' : ''}`} />
+              <span>{firebaseTesting ? 'Testing...' : 'Test Connection'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Connection Feedback Banner */}
+          {firebaseTestResult && (
+            <div
+              className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs animate-in fade-in ${
+                firebaseTestResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-medium">
+                {firebaseTestResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{firebaseTestResult.message}</span>
+              </div>
+              <button
+                onClick={() => setFirebaseTestResult(null)}
+                className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+          )}
+
+          {/* Sync Feedback Banner */}
+          {firebaseSyncResult && (
+            <div
+              className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs animate-in fade-in ${
+                firebaseSyncResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-medium">
+                {firebaseSyncResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{firebaseSyncResult.message}</span>
+              </div>
+              <button
+                onClick={() => setFirebaseSyncResult(null)}
+                className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+          )}
+
+          {/* Active Cloud Database Parameters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Project ID</span>
+              <span className="font-mono font-bold text-slate-900 text-xs truncate block mt-0.5">
+                {firebaseConfig.projectId}
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Firestore Database ID</span>
+              <span className="font-mono font-bold text-amber-700 text-xs truncate block mt-0.5" title={firebaseConfig.firestoreDatabaseId}>
+                {firebaseConfig.firestoreDatabaseId}
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Auth Domain</span>
+              <span className="font-mono text-slate-800 text-xs truncate block mt-0.5">
+                {firebaseConfig.authDomain}
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Storage Bucket</span>
+              <span className="font-mono text-slate-800 text-xs truncate block mt-0.5">
+                {firebaseConfig.storageBucket}
+              </span>
+            </div>
+          </div>
+
+          {/* Firebase Authentication Status Bar */}
+          {firebaseAuthUser ? (
+            <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                {firebaseAuthUser.photoURL ? (
+                  <img
+                    src={firebaseAuthUser.photoURL}
+                    alt=""
+                    className="w-9 h-9 rounded-full border border-emerald-400"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs">
+                    {firebaseAuthUser.email?.[0].toUpperCase() || 'G'}
+                  </div>
+                )}
+                <div>
+                  <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <span>{firebaseAuthUser.displayName || 'Google Account Connected'}</span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
+                      Authenticated
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">{firebaseAuthUser.email}</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleFirebaseLogout}
+                className="px-3 py-1.5 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 bg-amber-50/70 border border-amber-300/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-amber-950">
+                    Google Authentication Required for Firestore Cloud Sync
+                  </div>
+                  <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                    To satisfy Firestore security rules and authorize store backup writes, please authenticate with your Google account.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleFirebaseLogin}
+                disabled={isFirebaseLoggingIn}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs rounded-lg border border-slate-300 shadow-2xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                <span>{isFirebaseLoggingIn ? 'Connecting...' : 'Sign in with Google'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Two-Way Cloud Sync Actions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 mb-1">
+                  <CloudUpload className="w-4 h-4 text-amber-600" />
+                  <span>Push Store to Firestore (Cloud Backup)</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Upload all current store inventory, products, customer Khata ledgers, and sales receipts directly to your remote Firestore database.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePushToFirebase}
+                disabled={firebaseSyncing === 'push'}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <CloudUpload className="w-4 h-4" />
+                <span>{firebaseSyncing === 'push' ? 'Uploading to Firestore...' : 'Push Store to Firestore'}</span>
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 mb-1">
+                  <CloudDownload className="w-4 h-4 text-blue-600" />
+                  <span>Pull from Firestore (Cloud Restore)</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Retrieve store catalog, inventory stock balances, and Khata ledger records stored in Firestore and merge into local application state.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePullFromFirebase}
+                disabled={firebaseSyncing === 'pull'}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <CloudDownload className="w-4 h-4" />
+                <span>{firebaseSyncing === 'pull' ? 'Restoring from Firestore...' : 'Pull Store from Firestore'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Where to Add Configuration Keys Guide */}
+          <div className="border border-amber-200 bg-amber-50/40 rounded-xl p-4 text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-amber-900">
+                <Key className="w-4 h-4 text-amber-700" />
+                <span>Where to Add / Update Your Firebase Configuration Keys?</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConfigGuide(!showConfigGuide)}
+                className="text-[11px] font-semibold text-amber-800 hover:text-amber-900 underline cursor-pointer"
+              >
+                {showConfigGuide ? 'Hide Details' : 'View Config Guide'}
+              </button>
+            </div>
+
+            <div className="text-slate-700 leading-relaxed space-y-2">
+              <p>
+                <strong>1. Configuration Key File Location:</strong> In your application directory root, the configuration file is located at <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">firebase-applet-config.json</code>.
+              </p>
+              <p>
+                <strong>2. Automated Provisioning:</strong> In this AI Studio environment, your Firebase project and Firestore database (<code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">{firebaseConfig.firestoreDatabaseId}</code>) have already been provisioned and linked automatically!
+              </p>
+              <p>
+                <strong>3. Using Your Own External Firebase Project:</strong> If you want to use your own Firebase project from <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-orange-700 underline font-medium">console.firebase.google.com</a>, simply open <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">firebase-applet-config.json</code> and replace the values with your Web App keys.
+              </p>
+              <p>
+                <strong>4. How Code Loads Your Keys:</strong> The Firebase SDK initializes in <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">src/services/firebase.ts</code> using <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">import firebaseConfig from '../../firebase-applet-config.json'</code> and specifies <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">getFirestore(app, firebaseConfig.firestoreDatabaseId)</code>.
+              </p>
+            </div>
+
+            {showConfigGuide && (
+              <div className="pt-2 border-t border-amber-200/80 space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-amber-900">Current firebase-applet-config.json structure:</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyConfigTemplate}
+                    className="flex items-center gap-1 text-amber-800 hover:text-amber-950 font-medium px-2 py-1 bg-amber-100 rounded cursor-pointer"
+                  >
+                    {copiedKeys ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy JSON</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <pre className="bg-slate-900 text-emerald-400 p-3 rounded-lg font-mono text-[11px] overflow-x-auto select-all">
+                  {JSON.stringify(firebaseConfig, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* ========================================================= */}
       {/* DATABASE BACKUP, RESTORE & DATA PORTABILITY SECTION */}

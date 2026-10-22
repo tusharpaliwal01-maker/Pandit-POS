@@ -488,6 +488,18 @@ export class StorageService {
     return invoices.filter((i) => i.shopId === shopId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
+  static saveInvoice(invoice: Invoice): Invoice {
+    const invoices = load<Invoice[]>(STORAGE_KEYS.INVOICES, SEED_INVOICES);
+    const index = invoices.findIndex((i) => i.id === invoice.id);
+    if (index >= 0) {
+      invoices[index] = invoice;
+    } else {
+      invoices.push(invoice);
+    }
+    save(STORAGE_KEYS.INVOICES, invoices);
+    return invoice;
+  }
+
   /**
    * Executes atomic POS checkout:
    * 1. Validates stock levels

@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "Shop": {
+      "title": "Shop",
+      "description": "Retail shop location and business configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 50 },
+        "gstin": { "type": "string", "maxLength": 20 },
+        "address": { "type": "string", "maxLength": 500 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "pincode": { "type": "string", "maxLength": 20 },
+        "phonePrimary": { "type": "string", "maxLength": 30 },
+        "phoneSecondary": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "upiId": { "type": "string", "maxLength": 100 },
+        "receiptFooter": { "type": "string", "maxLength": 500 },
+        "defaultPaperWidth": { "type": "string", "enum": ["80mm", "58mm"] },
+        "defaultPrinterQueue": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "name", "code", "active"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Retail inventory stock item with pricing, barcode, and tax rates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 300 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 100 },
+        "purchasePrice": { "type": "number" },
+        "mrp": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "gstRate": { "type": "number" },
+        "stockQty": { "type": "number" },
+        "lowStockThreshold": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "batchNumber": { "type": "string", "maxLength": 100 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "shopId", "name", "barcode", "sellingPrice", "stockQty", "active"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Retail customer record and Khata ledger due balance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "mobile": { "type": "string", "maxLength": 30 },
+        "address": { "type": "string", "maxLength": 500 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "totalPurchases": { "type": "number" },
+        "khataBalance": { "type": "number" },
+        "maxCreditLimit": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "shopId", "name", "mobile", "khataBalance"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Completed point-of-sale invoice checkout record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "maxLength": 100 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 200 },
+        "customerMobile": { "type": "string", "maxLength": 30 },
+        "subtotal": { "type": "number" },
+        "discountTotal": { "type": "number" },
+        "taxTotal": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "UPI", "KHATA"] },
+        "status": { "type": "string", "enum": ["PAID", "VOID"] },
+        "cashierName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "shopId", "invoiceNumber", "grandTotal", "paymentMethod", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Shop staff, admin, or cashier authentication profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 100 },
+        "fullName": { "type": "string", "maxLength": 200 },
+        "mobile": { "type": "string", "maxLength": 30 },
+        "role": { "type": "string", "enum": ["SUPERMASTER", "ADMIN", "STAFF"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "shopId", "username", "fullName", "role", "active"]
+    }
+  },
+  "firestore": {
+    "/shops/{shopId}": {
+      "schema": { "$ref": "#/entities/Shop" },
+      "description": "Shop profiles and store configuration details"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Inventory stock catalog items"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customer profiles and Khata balances"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Point-of-sale customer sale transactions"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Store operator and staff accounts"
+    }
+  }
+}
