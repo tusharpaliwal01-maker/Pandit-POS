@@ -170,7 +170,7 @@ export class StorageService {
     const hasCleaned = localStorage.getItem(CLEAN_SLATE_KEY) === 'true';
 
     if (!hasCleaned) {
-      // Purge old fireworks products, demo invoices, demo customers, and Sivakasi demo shops
+      // Purge old fireworks products, demo invoices, demo customers, and Sivakasi demo shops ONLY if no user data exists
       const existingShops = load<Shop[]>(STORAGE_KEYS.SHOPS, []);
       const isOldSivakasi = existingShops.some(
         (s) => s.code === 'PFC-MAIN' || s.name.toUpperCase().includes('FIREWORKS') || s.code === 'PCD-BR2'
@@ -180,12 +180,12 @@ export class StorageService {
         save(STORAGE_KEYS.SHOPS, SEED_SHOPS);
       }
 
-      // Reset products, invoices, khata, customers to clean slate
-      save(STORAGE_KEYS.PRODUCTS, []);
-      save(STORAGE_KEYS.INVOICES, []);
-      save(STORAGE_KEYS.CUSTOMERS, []);
-      save(STORAGE_KEYS.KHATA_ENTRIES, []);
-      save(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
+      // Initialize empty arrays ONLY if items don't already exist
+      if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) save(STORAGE_KEYS.PRODUCTS, []);
+      if (!localStorage.getItem(STORAGE_KEYS.INVOICES)) save(STORAGE_KEYS.INVOICES, []);
+      if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) save(STORAGE_KEYS.CUSTOMERS, []);
+      if (!localStorage.getItem(STORAGE_KEYS.KHATA_ENTRIES)) save(STORAGE_KEYS.KHATA_ENTRIES, []);
+      if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) save(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
 
       // Keep user accounts while ensuring tushar.paliwal01 credentials are valid
       const currentUsers = load<User[]>(STORAGE_KEYS.USERS, []);
