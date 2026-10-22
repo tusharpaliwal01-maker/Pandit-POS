@@ -296,6 +296,18 @@ export const PosBillingView: React.FC<PosBillingViewProps> = ({
     enabled: !isCustomerModalOpen && !isScannerTestOpen && !isCameraScannerOpen && !completedInvoice,
   });
 
+  // Listen for global camera scan from header
+  useEffect(() => {
+    const handleGlobalBarcode = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        handleBarcodeScanned(customEvent.detail);
+      }
+    };
+    window.addEventListener('global-barcode-scan', handleGlobalBarcode);
+    return () => window.removeEventListener('global-barcode-scan', handleGlobalBarcode);
+  }, [handleBarcodeScanned]);
+
   // Top Sellers / High-Frequency Items for 1-Tap Fast Billing
   const topSellers = useMemo(() => {
     return products
@@ -1100,6 +1112,10 @@ export const PosBillingView: React.FC<PosBillingViewProps> = ({
           refocusScanner();
         }}
         onSimulateScan={handleBarcodeScanned}
+        onOpenLiveCamera={() => {
+          setIsScannerTestOpen(false);
+          setIsCameraScannerOpen(true);
+        }}
       />
 
       <CameraScannerModal

@@ -20,7 +20,9 @@ import {
   Info,
   Clock,
   Layers,
+  FileSpreadsheet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Shop, BackupData } from '../types';
 import { StorageService } from '../services/storage';
 
@@ -492,34 +494,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ shop, onRefreshData 
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <button
                   type="button"
                   onClick={() => {
                     try {
                       setIsExporting(true);
                       const backup = StorageService.exportBackup(shop.id);
-                      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-                        JSON.stringify(backup, null, 2)
-                      )}`;
+                      const jsonText = JSON.stringify(backup, null, 2);
+                      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+                      const blobUrl = URL.createObjectURL(blob);
                       const downloadAnchor = document.createElement('a');
                       const timestamp = new Date()
                         .toISOString()
                         .replace(/[:.]/g, '-')
                         .slice(0, 19);
-                      downloadAnchor.setAttribute('href', jsonString);
-                      downloadAnchor.setAttribute(
-                        'download',
-                        `pandit_pos_backup_${shop.code || 'MAIN'}_${timestamp}.json`
-                      );
+                      downloadAnchor.href = blobUrl;
+                      downloadAnchor.download = `pandit_pos_backup_${shop.code || 'MAIN'}_${timestamp}.json`;
                       document.body.appendChild(downloadAnchor);
                       downloadAnchor.click();
                       downloadAnchor.remove();
+                      URL.revokeObjectURL(blobUrl);
 
                       setLastExportTime(new Date().toLocaleTimeString());
                       setRestoreStatus({
                         type: 'success',
-                        message: `Database backup file generated successfully (${backup.summary.totalProducts} products, ${backup.summary.totalInvoices} invoices, ${backup.summary.totalCustomers} customers).`,
+                        message: `Lossless database backup downloaded successfully (${backup.summary.totalProducts} products, ${backup.summary.totalInvoices} invoices, ${backup.summary.totalCustomers} customers).`,
                       });
                     } catch (err: any) {
                       setRestoreStatus({
@@ -534,7 +534,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ shop, onRefreshData 
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
-                  <span>{isExporting ? 'Generating JSON...' : 'Download JSON Backup'}</span>
+                  <span>{isExporting ? 'Generating JSON...' : 'Download JSON Backup (.json)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const products = StorageService.getProducts(shop.id);
+                      const invoices = StorageService.getInvoices(shop.id);
+                      const customers = StorageService.getCustomers(shop.id);
+                      const wb = XLSX.utils.book_new();
+
+                      const invData = products.map((p, i) => ({
+                        '#': i + 1,
+                        'Barcode': p.barcode,
+                        'Product Name': p.name,
+                        'Category': p.category,
+                        'Unit': p.unit,
+                        'Purchase Price': p.purchasePrice,
+                        'MRP': p.mrp,
+                        'Selling Price': p.sellingPrice,
+                        'Stock Qty': p.stockQty,
+                        'GST %': p.gstRate,
+                      }));
+                      const wsInv = XLSX.utils.json_to_sheet(
+                        invData.length ? invData : [{ 'Product Name': 'No items' }]
+                      );
+                      XLSX.utils.book_append_sheet(wb, wsInv, 'Inventory Stock');
+
+                      const salesData = invoices.map((inv) => ({
+                        'Invoice #': inv.invoiceNumber,
+                        'Date': new Date(inv.createdAt).toLocaleDateString('en-IN'),
+                        'Customer': inv.customerName || 'Walk-in',
+                        'Mobile': inv.customerMobile || '-',
+                        'Payment Mode': inv.paymentMethod,
+                        'Subtotal (₹)': inv.subtotal,
+                        'GST Total (₹)': inv.gstTotal,
+                        'Grand Total (₹)': inv.grandTotal,
+                        'Cashier': inv.cashierName,
+                      }));
+                      const wsSales = XLSX.utils.json_to_sheet(
+                        salesData.length ? salesData : [{ 'Invoice #': 'No bills' }]
+                      );
+                      XLSX.utils.book_append_sheet(wb, wsSales, 'Sales & Invoices');
+
+                      const khataData = customers.map((c) => ({
+                        'Customer Name': c.name,
+                        'Mobile': c.mobile,
+                        'Address': c.address || '-',
+                        'Credit Limit (₹)': c.maxCreditLimit || 0,
+                        'Khata Due (₹)': c.khataBalance,
+                      }));
+                      const wsKhata = XLSX.utils.json_to_sheet(
+                        khataData.length ? khataData : [{ 'Customer Name': 'No customers' }]
+                      );
+                      XLSX.utils.book_append_sheet(wb, wsKhata, 'Khata Ledger');
+
+                      const dateStr = new Date().toISOString().slice(0, 10);
+                      XLSX.writeFile(
+                        wb,
+                        `pandit_pos_store_database_${shop.code || 'MAIN'}_${dateStr}.xlsx`
+                      );
+
+                      setRestoreStatus({
+                        type: 'success',
+                        message: `Complete store workbook exported as Excel (.xlsx)! (${products.length} products, ${invoices.length} invoices, ${customers.length} customers).`,
+                      });
+                    } catch (err: any) {
+                      setRestoreStatus({
+                        type: 'error',
+                        message: `Excel export failed: ${err.message}`,
+                      });
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 active:scale-[0.99] text-slate-800 border border-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>Download Store Database as Excel (.xlsx)</span>
                 </button>
               </div>
             </div>

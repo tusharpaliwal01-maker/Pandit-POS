@@ -238,6 +238,26 @@ export interface HardwarePrinterState {
   lastErrorMessage?: string;
 }
 
+export interface GoogleSyncStatus {
+  lastSyncTimestamp?: string; // ISO string e.g. "2026-10-21T21:40:00.000Z"
+  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'NEVER';
+  lastSyncSpreadsheetName?: string;
+  lastSyncSpreadsheetUrl?: string;
+  lastSyncRowsCount?: number;
+  lastError?: string;
+  lastErrorTimestamp?: string;
+}
+
+export interface ConnectedGoogleSheet {
+  shopId?: string;
+  spreadsheetId: string;
+  spreadsheetName: string;
+  spreadsheetUrl?: string;
+  autoSync: boolean;
+  connectedAt: string;
+  lastAutoSyncTimestamp?: string;
+}
+
 export interface BackupData {
   version: string;
   appName: string;
@@ -254,6 +274,8 @@ export interface BackupData {
     khataEntries: KhataEntry[];
     hardwareConfig?: HardwareConfig;
     printerConfig?: string;
+    syncStatus?: GoogleSyncStatus;
+    connectedGoogleSheet?: ConnectedGoogleSheet;
   };
   summary: {
     totalShops: number;

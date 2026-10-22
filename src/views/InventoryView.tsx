@@ -17,9 +17,14 @@ import {
   Percent,
   ArrowUpDown,
   FileSpreadsheet,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import { Product, Shop } from '../types';
 import { StorageService } from '../services/storage';
+import { ExcelImportModal } from '../components/inventory/ExcelImportModal';
+import { CameraScannerModal } from '../components/hardware/CameraScannerModal';
+import { playBarcodeBeep } from '../utils/soundHelper';
 
 export interface ProfitMarginInfo {
   profit: number;
@@ -69,6 +74,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [sortBy, setSortBy] = useState<'default' | 'margin_asc' | 'margin_desc' | 'stock' | 'name'>('default');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isCameraScanOpen, setIsCameraScanOpen] = useState(false);
 
   useEffect(() => {
     if (initialOnlyLowStock) {
@@ -79,15 +86,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // Form State
   const [formName, setFormName] = useState('');
   const [formBarcode, setFormBarcode] = useState('');
-  const [formCategory, setFormCategory] = useState('Sparklers (Phuljhadi)');
+  const [formCategory, setFormCategory] = useState('General');
   const [formPurchasePrice, setFormPurchasePrice] = useState('50');
-  const [formMrp, setFormMrp] = useState('120');
-  const [formSellingPrice, setFormSellingPrice] = useState('95');
+  const [formMrp, setFormMrp] = useState('100');
+  const [formSellingPrice, setFormSellingPrice] = useState('90');
   const [formGstRate, setFormGstRate] = useState('18');
-  const [formStockQty, setFormStockQty] = useState('50');
-  const [formLowStockThreshold, setFormLowStockThreshold] = useState('20');
-  const [formUnit, setFormUnit] = useState('box');
-  const [formBatch, setFormBatch] = useState(`PFC-${new Date().getFullYear()}-B1`);
+  const [formStockQty, setFormStockQty] = useState('25');
+  const [formLowStockThreshold, setFormLowStockThreshold] = useState('10');
+  const [formUnit, setFormUnit] = useState('pcs');
+  const [formBatch, setFormBatch] = useState(`BAT-${new Date().getFullYear()}`);
   const [formDescription, setFormDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -162,15 +169,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setEditingProduct(null);
     setFormName('');
     setFormBarcode(`890${Math.floor(100000000 + Math.random() * 900000000)}`);
-    setFormCategory(categories[1] || 'Sparklers (Phuljhadi)');
+    setFormCategory(categories.find((c) => c !== 'All') || 'General');
     setFormPurchasePrice('50');
-    setFormMrp('120');
-    setFormSellingPrice('95');
+    setFormMrp('100');
+    setFormSellingPrice('90');
     setFormGstRate('18');
-    setFormStockQty('50');
-    setFormLowStockThreshold('20');
-    setFormUnit('box');
-    setFormBatch(`PFC-${new Date().getFullYear()}-B1`);
+    setFormStockQty('25');
+    setFormLowStockThreshold('10');
+    setFormUnit('pcs');
+    setFormBatch(`BAT-${new Date().getFullYear()}`);
     setFormDescription('');
     setFormError(null);
     setIsAddModalOpen(true);
@@ -247,11 +254,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setIsExcelImportOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+          >
+            <Upload className="w-4 h-4 text-emerald-700" />
+            <span>Import Excel / CSV</span>
+          </button>
+
           {onNavigateToSheets && (
             <button
               onClick={onNavigateToSheets}
-              className="flex items-center gap-1.5 px-3.5 py-2 border border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span>Google Sheets Sync</span>
@@ -261,7 +276,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           {onNavigateToLabels && (
             <button
               onClick={onNavigateToLabels}
-              className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Tag className="w-4 h-4 text-orange-600" />
               <span>Print Barcode Labels</span>
@@ -270,7 +285,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
           <button
             onClick={handleOpenAdd}
-            className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Product</span>
@@ -656,22 +671,34 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs font-semibold text-slate-700">Barcode *</label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormBarcode(`890${Math.floor(100000000 + Math.random() * 900000000)}`)
-                      }
-                      className="text-[10px] text-orange-600 hover:underline flex items-center gap-0.5"
-                    >
-                      <Sparkles className="w-3 h-3" /> Auto-Generate
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsCameraScanOpen(true)}
+                        className="text-[10px] text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-1 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 cursor-pointer"
+                        title="Scan barcode directly using camera"
+                      >
+                        <Camera className="w-3 h-3" />
+                        <span>Scan Camera</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormBarcode(`890${Math.floor(100000000 + Math.random() * 900000000)}`)
+                        }
+                        className="text-[10px] text-slate-500 hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3 text-orange-500" /> Auto
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={formBarcode}
                     onChange={(e) => setFormBarcode(e.target.value)}
+                    placeholder="Scan or enter barcode..."
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:bg-white focus:border-orange-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500 font-semibold"
                   />
                 </div>
 
@@ -907,6 +934,27 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Excel / CSV Bulk Importer Modal */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        shop={shop}
+        onImportSuccess={() => {
+          onRefreshData();
+        }}
+      />
+
+      {/* Optical Camera Barcode Scanner for Add/Edit Form */}
+      <CameraScannerModal
+        isOpen={isCameraScanOpen}
+        onClose={() => setIsCameraScanOpen(false)}
+        onScan={(scannedBarcode) => {
+          setFormBarcode(scannedBarcode);
+          playBarcodeBeep();
+          setIsCameraScanOpen(false);
+        }}
+      />
     </div>
   );
 };

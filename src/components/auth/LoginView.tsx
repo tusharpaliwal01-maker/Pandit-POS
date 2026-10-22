@@ -31,10 +31,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const handleLogin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
+    const cleanUser = username.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanUser || !cleanPass) {
+      setError('Please enter both your individual username and password.');
+      return;
+    }
+
     setLoading(true);
 
     setTimeout(() => {
-      const result = StorageService.authenticate(username, password);
+      const result = StorageService.authenticate(cleanUser, cleanPass);
       if (result.success && result.user && result.shop) {
         if (rememberMe) {
           StorageService.setCurrentSession(result.user, result.shop);
@@ -44,7 +52,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setError(result.error || 'Invalid credentials. Each user must sign in with their unique username and password.');
       }
       setLoading(false);
-    }, 200);
+    }, 150);
   };
 
   return (
@@ -62,7 +70,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 PRO RETAIL v2.6
               </span>
             </h1>
-            <p className="text-xs text-slate-400">Fireworks Wholesale &amp; Retail Cloud Suite</p>
+            <p className="text-xs text-slate-400">Retail POS &amp; Inventory Management Cloud Suite</p>
           </div>
         </div>
 
@@ -107,7 +115,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your personal username"
+                  placeholder="Username (e.g. manoj_admin) or 10-digit mobile"
                   autoFocus
                   required
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-colors"

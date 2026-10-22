@@ -19,6 +19,9 @@ import {
   UserPlus,
   Power,
   Lock,
+  Eye,
+  EyeOff,
+  Copy,
 } from 'lucide-react';
 import { Shop, User, UserRole, UserPermissions } from '../types';
 import { StorageService } from '../services/storage';
@@ -76,11 +79,106 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
   const [adminFullName, setAdminFullName] = useState('');
   const [adminMobile, setAdminMobile] = useState('');
   const [adminPassword, setAdminPassword] = useState('pandit12345678');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [createdBranchNotice, setCreatedBranchNotice] = useState<{
+    shopName: string;
+    username: string;
+    password: string;
+    mobile: string;
+  } | null>(null);
   const [shopError, setShopError] = useState<string | null>(null);
+
+  // Edit Store Branch State
+  const [isEditShopOpen, setIsEditShopOpen] = useState(false);
+  const [editingShop, setEditingShop] = useState<Shop | null>(null);
+  const [editShopName, setEditShopName] = useState('');
+  const [editShopCode, setEditShopCode] = useState('');
+  const [editGstin, setEditGstin] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editState, setEditState] = useState('');
+  const [editPincode, setEditPincode] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editUpiId, setEditUpiId] = useState('');
+  const [editReceiptFooter, setEditReceiptFooter] = useState('');
 
   const refreshUsers = () => {
     setAllUsers(StorageService.getUsers());
     onRefreshData();
+  };
+
+  const handleOpenEditShop = (shop: Shop) => {
+    setEditingShop(shop);
+    setEditShopName(shop.name);
+    setEditShopCode(shop.code);
+    setEditGstin(shop.gstin || '');
+    setEditAddress(shop.address || '');
+    setEditCity(shop.city || '');
+    setEditState(shop.state || '');
+    setEditPincode(shop.pincode || '');
+    setEditPhone(shop.phonePrimary || '');
+    setEditUpiId(shop.upiId || '');
+    setEditReceiptFooter(shop.receiptFooter || '');
+    setIsEditShopOpen(true);
+  };
+
+  const handleSaveEditShop = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShop) return;
+
+    const updatedShop: Shop = {
+      ...editingShop,
+      name: editShopName.trim(),
+      code: (editShopCode.trim() || 'STORE').toUpperCase(),
+      gstin: editGstin.trim().toUpperCase(),
+      address: editAddress.trim(),
+      city: editCity.trim(),
+      state: editState.trim(),
+      pincode: editPincode.trim(),
+      phonePrimary: editPhone.trim(),
+      upiId: editUpiId.trim(),
+      receiptFooter: editReceiptFooter.trim(),
+    };
+
+    StorageService.saveShop(updatedShop);
+    setIsEditShopOpen(false);
+    refreshUsers();
+  };
+
+  const handleDeleteShop = (shop: Shop) => {
+    if (shops.length <= 1) {
+      alert('Cannot delete the only remaining store branch.');
+      return;
+    }
+    if (
+      window.confirm(
+        `Are you sure you want to permanently delete store branch "${shop.name}" (${shop.code})? All associated products, stock, and invoices in this store will be deleted.`
+      )
+    ) {
+      StorageService.deleteShop(shop.id);
+      const remainingShops = StorageService.getShops();
+      if (shop.id === currentShop.id && remainingShops.length > 0) {
+        onSelectShop(remainingShops[0]);
+      }
+      refreshUsers();
+    }
+  };
+
+  const handleResetToCleanSlate = () => {
+    if (
+      window.confirm(
+        '⚠️ Are you sure you want to RESET ALL DATA to a clean slate? This will remove all demo products, demo invoices, demo customers, and Sivakasi demo stores. Your Supermaster account (tushar.paliwal01) will remain active.'
+      )
+    ) {
+      StorageService.resetToCleanSlate();
+      const freshShops = StorageService.getShops();
+      if (freshShops.length > 0) {
+        onSelectShop(freshShops[0]);
+      }
+      refreshUsers();
+    }
   };
 
   // Filtered Users List
@@ -146,7 +244,7 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
     e.preventDefault();
     setFormError(null);
 
-    const cleanUsername = formUsername.trim().toLowerCase();
+    const cleanUsername = formUsername.trim().replace(/^@/, '').toLowerCase();
     const cleanFullName = formFullName.trim();
     const cleanMobile = formMobile.trim();
     const cleanPassword = formPassword.trim();
@@ -220,7 +318,12 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
     e.preventDefault();
     setShopError(null);
 
-    if (!shopName.trim() || !adminUsername.trim() || !adminMobile.trim()) {
+    const cleanShopName = shopName.trim();
+    const cleanAdminUsername = adminUsername.trim().replace(/^@/, '').toLowerCase();
+    const cleanAdminMobile = adminMobile.trim();
+    const cleanAdminPassword = adminPassword.trim() || 'admin123';
+
+    if (!cleanShopName || !cleanAdminUsername || !cleanAdminMobile) {
       setShopError('Shop Name, Admin Username, and Admin Mobile are required.');
       return;
     }
@@ -228,17 +331,17 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
     const newShopId = `shop-${Date.now()}`;
     const newShop: Shop = {
       id: newShopId,
-      name: shopName.trim(),
-      code: (shopCode.trim() || shopName.slice(0, 3)).toUpperCase(),
-      gstin: (gstin.trim() || '07AAECP1234F1Z0').toUpperCase(),
-      address: 'Main Commercial Market, Fireworks Wholesale Godown',
-      city: city.trim() || 'Delhi',
+      name: cleanShopName,
+      code: (shopCode.trim() || cleanShopName.slice(0, 3)).toUpperCase(),
+      gstin: (gstin.trim() || '07AAAAA0000A1Z5').toUpperCase(),
+      address: 'Shop No. 1, Central Commercial Market',
+      city: city.trim() || 'New Delhi',
       state: 'Delhi',
-      pincode: '110006',
+      pincode: '110001',
       phonePrimary: phone.trim() || '+91 98765 00000',
-      email: `${adminUsername.trim()}@panditfireworks.com`,
-      upiId: `${adminUsername.trim()}@upi`,
-      receiptFooter: 'Thank you for shopping with Pandit Fireworks! Celebrate responsibly.',
+      email: `${cleanAdminUsername}@retailpos.com`,
+      upiId: `${cleanAdminUsername}@upi`,
+      receiptFooter: 'Thank you for shopping with us! Please visit again.',
       defaultPaperWidth: '80mm',
       defaultPrinterQueue: 'RETSOL RTP82',
       createdAt: new Date().toISOString(),
@@ -248,10 +351,10 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
     const newAdminUser: User = {
       id: `user-${Date.now()}`,
       shopId: newShopId,
-      username: adminUsername.trim().toLowerCase(),
-      password: adminPassword.trim() || 'pandit12345678',
-      fullName: adminFullName.trim() || adminUsername.trim(),
-      mobile: adminMobile.trim(),
+      username: cleanAdminUsername,
+      password: cleanAdminPassword,
+      fullName: adminFullName.trim() || cleanAdminUsername,
+      mobile: cleanAdminMobile,
       role: 'ADMIN',
       permissions: {
         canBilling: true,
@@ -269,12 +372,24 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
     refreshUsers();
     setIsCreateShopOpen(false);
 
+    // Show credential card notice
+    setCreatedBranchNotice({
+      shopName: newShop.name,
+      username: newAdminUser.username,
+      password: newAdminUser.password || 'pandit12345678',
+      mobile: newAdminUser.mobile,
+    });
+
     // Reset Form
     setShopName('');
     setShopCode('');
+    setGstin('');
+    setCity('');
+    setPhone('');
     setAdminUsername('');
     setAdminFullName('');
     setAdminMobile('');
+    setAdminPassword('pandit12345678');
   };
 
   return (
@@ -309,6 +424,35 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Success Notification for Newly Provisioned Branch & Admin Credentials */}
+      {createdBranchNotice && (
+        <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-emerald-950 flex items-start justify-between gap-4 animate-in fade-in duration-200 shadow-sm">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>Store Branch &amp; Admin Account Provisioned Successfully!</span>
+            </div>
+            <p className="text-xs text-emerald-800">
+              Branch Name: <strong>{createdBranchNotice.shopName}</strong>
+            </p>
+            <div className="p-3 bg-white border border-emerald-200 rounded-xl text-xs font-mono space-y-1 text-slate-800 shadow-2xs">
+              <div>Username: <strong className="text-orange-600 text-sm">@{createdBranchNotice.username}</strong></div>
+              <div>Password: <strong className="text-slate-900 text-sm">{createdBranchNotice.password}</strong></div>
+              <div>Mobile: <strong className="text-slate-900">{createdBranchNotice.mobile}</strong></div>
+            </div>
+            <p className="text-[11px] text-emerald-700">
+              ✓ Credentials are fully active. The new branch administrator can log in directly on the login screen using this username/mobile and password.
+            </p>
+          </div>
+          <button
+            onClick={() => setCreatedBranchNotice(null)}
+            className="p-1.5 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 rounded-lg cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Primary Subtabs: Accounts vs Branches */}
       <div className="flex items-center gap-2 border-b border-slate-200">
@@ -487,8 +631,26 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                           </div>
                         </td>
 
-                        <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
-                          {u.password ? '••••••••' : 'Default (123456)'}
+                        <td className="py-3 px-3 font-mono text-[11px] text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-slate-800">
+                              {revealedPasswords[u.id] ? u.password || '123456' : '••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRevealedPasswords((prev) => ({ ...prev, [u.id]: !prev[u.id] }))
+                              }
+                              title={revealedPasswords[u.id] ? 'Hide password' : 'View password'}
+                              className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer"
+                            >
+                              {revealedPasswords[u.id] ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
                         </td>
 
                         <td className="py-3 px-3 text-center">
@@ -545,6 +707,31 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
       {/* TAB 2: Store Branches Management */}
       {activeTab === 'shops' && (
         <div className="space-y-4">
+          {/* Supermaster Data Management Bar */}
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-100 text-amber-900 rounded-xl">
+                <Store className="w-5 h-5 text-amber-800" />
+              </div>
+              <div>
+                <h4 className="font-bold text-amber-950 text-sm">Store Branches ({shops.length})</h4>
+                <p className="text-amber-800/80 text-[11px] mt-0.5">
+                  Configure store identity, edit branch addresses, or reset all demo products to a clean slate.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetToCleanSlate}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0 text-xs"
+              title="Wipe demo items, demo invoices, demo customers and reset to fresh clean slate"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Reset to Clean Slate</span>
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {shops.map((s) => {
               const isCurrent = s.id === currentShop.id;
@@ -571,7 +758,7 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Code: <strong className="font-mono text-slate-700">{s.code}</strong> · GSTIN:{' '}
-                        <span className="font-mono">{s.gstin}</span>
+                        <span className="font-mono">{s.gstin || 'Unspecified'}</span>
                       </p>
                     </div>
 
@@ -600,24 +787,46 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-1 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400">
+                  <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-500 font-medium truncate max-w-[200px]">
                       {s.city}, {s.state} · {s.phonePrimary}
                     </span>
 
-                    {!isCurrent ? (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => onSelectShop(s)}
-                        className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        type="button"
+                        onClick={() => handleOpenEditShop(s)}
+                        className="p-1.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer border border-slate-200"
+                        title="Edit store branch name, address, GSTIN, and receipts"
                       >
-                        Switch Store Context
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
-                      <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Active Session</span>
-                      </span>
-                    )}
+
+                      {shops.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteShop(s)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-slate-200"
+                          title="Delete store branch"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {!isCurrent ? (
+                        <button
+                          onClick={() => onSelectShop(s)}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Switch Context
+                        </button>
+                      ) : (
+                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1 px-2 py-1 bg-emerald-50 rounded-lg border border-emerald-200">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Active</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -689,14 +898,23 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                     <label className="block text-slate-700 font-semibold mb-1">
                       Password *
                     </label>
-                    <input
-                      type="text"
-                      value={formPassword}
-                      onChange={(e) => setFormPassword(e.target.value)}
-                      placeholder="Enter security password"
-                      required
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showFormPassword ? 'text' : 'password'}
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                        placeholder="Enter security password"
+                        required
+                        className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowFormPassword(!showFormPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -957,14 +1175,24 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-medium mb-1">Default Password</label>
-                    <input
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Default: pandit12345678"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-hidden focus:bg-white"
-                    />
+                    <label className="block text-slate-700 font-medium mb-1">Admin Password *</label>
+                    <div className="relative">
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Default: pandit12345678"
+                        required
+                        className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -982,6 +1210,156 @@ export const SupermasterView: React.FC<SupermasterViewProps> = ({
                   className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   Provision Branch &amp; Admin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: Edit Store Branch Details */}
+      {isEditShopOpen && editingShop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-orange-600" />
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Edit Store Branch: {editingShop.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsEditShopOpen(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditShop} className="p-6 space-y-4 text-xs">
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-slate-700 font-semibold mb-1">Store Name *</label>
+                    <input
+                      type="text"
+                      value={editShopName}
+                      onChange={(e) => setEditShopName(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Branch Code *</label>
+                    <input
+                      type="text"
+                      value={editShopCode}
+                      onChange={(e) => setEditShopCode(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono uppercase outline-hidden focus:bg-white focus:border-orange-500 font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">GSTIN Number</label>
+                    <input
+                      type="text"
+                      value={editGstin}
+                      onChange={(e) => setEditGstin(e.target.value)}
+                      placeholder="e.g. 07AAAAA0000A1Z5"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Primary Phone</label>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Store Address</label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="Shop No., Market / Area"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editCity}
+                      onChange={(e) => setEditCity(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">State</label>
+                    <input
+                      type="text"
+                      value={editState}
+                      onChange={(e) => setEditState(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Pincode</label>
+                    <input
+                      type="text"
+                      value={editPincode}
+                      onChange={(e) => setEditPincode(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">UPI ID for Invoices / QR</label>
+                  <input
+                    type="text"
+                    value={editUpiId}
+                    onChange={(e) => setEditUpiId(e.target.value)}
+                    placeholder="e.g. storename@upi"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-hidden focus:bg-white focus:border-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Printed Receipt Footer</label>
+                  <textarea
+                    rows={2}
+                    value={editReceiptFooter}
+                    onChange={(e) => setEditReceiptFooter(e.target.value)}
+                    placeholder="Thank you for shopping with us! Please visit again."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-hidden focus:bg-white focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditShopOpen(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                >
+                  Save Store Details
                 </button>
               </div>
             </form>

@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Scan, X, CheckCircle2, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Scan, X, CheckCircle2, Zap, AlertTriangle, RefreshCw, Camera } from 'lucide-react';
 import { useBarcodeScanner, ScannerDiagnostic, sanitizeBarcode } from '../../hooks/useBarcodeScanner';
 
 interface ScannerTestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSimulateScan?: (barcode: string) => void;
+  onOpenLiveCamera?: () => void;
 }
 
 export const ScannerTestModal: React.FC<ScannerTestModalProps> = ({
   isOpen,
   onClose,
   onSimulateScan,
+  onOpenLiveCamera,
 }) => {
   const [testInput, setTestInput] = useState('');
   const [history, setHistory] = useState<ScannerDiagnostic[]>([]);
@@ -72,12 +74,24 @@ export const ScannerTestModal: React.FC<ScannerTestModalProps> = ({
               <p className="text-xs text-slate-500">USB / Bluetooth Laser Gun in Keyboard Wedge Mode</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenLiveCamera && (
+              <button
+                type="button"
+                onClick={onOpenLiveCamera}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5 text-blue-600" />
+                <span>Camera Scanner</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

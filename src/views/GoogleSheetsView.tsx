@@ -17,7 +17,13 @@ import {
   Plus,
   HelpCircle,
   FileCheck,
+  FileDown,
+  Trash2,
+  Sparkles,
+  Clock,
+  Zap,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Shop, Product, Invoice, Customer } from '../types';
 import {
   initGoogleAuth,
@@ -29,6 +35,7 @@ import {
   exportKhataToGoogleSheet,
   exportCompleteStoreToGoogleSheet,
   importProductsFromGoogleSheet,
+  triggerRealtimeInventorySync,
   SyncResult,
 } from '../services/googleSheetsService';
 import { StorageService } from '../services/storage';
@@ -197,6 +204,16 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
       }
 
       setLastSyncResult(res);
+      const targetSheet = spreadsheets.find((s) => s.id === (targetId || res.spreadsheetId));
+      const sheetName = targetSheet?.name || `PANDIT POS Sync [${shop.name}]`;
+
+      // Record successful sync in persistent storage
+      StorageService.recordGoogleSyncSuccess({
+        spreadsheetName: sheetName,
+        spreadsheetUrl: res.spreadsheetUrl,
+        rowsCount: res.rowsExported,
+      });
+
       setStatusMessage({
         type: 'success',
         text: `Export successful! Synced ${res.rowsExported} rows to "${res.tabName}".`,
@@ -204,14 +221,199 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
       refreshSpreadsheetsList();
     } catch (err: any) {
       console.error('Export failed:', err);
+      const errorMsg = err?.message || 'Google Sheets sync failed';
+      // Record failure in persistent storage for header alert
+      StorageService.recordGoogleSyncFailure(errorMsg);
       setStatusMessage({
         type: 'error',
-        text: `Export failed: ${err.message}`,
+        text: `Export failed: ${errorMsg}`,
       });
     } finally {
       setIsSyncing(null);
     }
   };
+
+  // Direct Offline Excel / CSV Download (No Google Sign-In Required)
+  const handleDownloadExcel = (
+    type: 'all' | 'inventory' | 'sales' | 'khata',
+    format: 'xlsx' | 'csv' = 'xlsx'
+  ) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      if (type === 'all' || type === 'inventory') {
+        const inventoryRows = products.map((p, idx) => ({
+          'S.No': idx + 1,
+          'Barcode': p.barcode,
+          'Product Name': p.name,
+          'Category': p.category,
+          'Unit': p.unit,
+          'Purchase Price': p.purchasePrice,
+          'MRP': p.mrp,
+          'Selling Price': p.sellingPrice,
+          'GST Rate (%)': p.gstRate,
+          'Stock Qty': p.stockQty,
+          'Low Stock Alert': p.lowStockThreshold,
+          'Batch No': p.batchNumber || '-',
+          'Status': p.active ? 'Active' : 'Inactive',
+        }));
+        const wsInv = XLSX.utils.json_to_sheet(
+          inventoryRows.length
+            ? inventoryRows
+            : [
+                {
+                  'S.No': 1,
+                  'Barcode': '890123456789',
+                  'Product Name': 'Sample Product',
+                  'Category': 'General',
+                  'Unit': 'pcs',
+                  'Purchase Price': 100,
+                  'MRP': 150,
+                  'Selling Price': 130,
+                  'GST Rate (%)': 18,
+                  'Stock Qty': 50,
+                  'Low Stock Alert': 10,
+                  'Batch No': '-',
+                  'Status': 'Active',
+                },
+              ]
+        );
+        XLSX.utils.book_append_sheet(wb, wsInv, 'Inventory Stock');
+      }
+
+      if (type === 'all' || type === 'sales') {
+        const salesRows = invoices.map((inv) => ({
+          'Invoice Number': inv.invoiceNumber,
+          'Date': new Date(inv.createdAt).toLocaleDateString('en-IN'),
+          'Customer': inv.customerName || 'Walk-in',
+          'Mobile': inv.customerMobile || '-',
+          'Payment Mode': inv.paymentMethod,
+          'Subtotal': inv.subtotal,
+          'Discount': inv.discountTotal,
+          'GST Total': inv.gstTotal,
+          'Grand Total': inv.grandTotal,
+          'Cashier': inv.cashierName,
+          'Item Count': inv.items.length,
+        }));
+        const wsSales = XLSX.utils.json_to_sheet(
+          salesRows.length
+            ? salesRows
+            : [
+                {
+                  'Invoice Number': 'INV-001',
+                  'Date': dateStr,
+                  'Customer': 'Walk-in Customer',
+                  'Mobile': '-',
+                  'Payment Mode': 'CASH',
+                  'Taxable Amount': 0,
+                  'CGST': 0,
+                  'SGST': 0,
+                  'Grand Total': 0,
+                  'Cashier': 'Admin',
+                  'Item Count': 0,
+                },
+              ]
+        );
+        XLSX.utils.book_append_sheet(wb, wsSales, 'Sales & Invoices');
+      }
+
+      if (type === 'all' || type === 'khata') {
+        const khataRows = customers.map((c) => ({
+          'Customer Name': c.name,
+          'Mobile Number': c.mobile,
+          'Address': c.address || '-',
+          'Credit Limit (₹)': c.maxCreditLimit || 0,
+          'Current Khata Due (₹)': c.khataBalance,
+          'Status': c.khataBalance > 0 ? 'PAYMENT DUE' : 'CLEAR',
+          'Created Date': c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '-',
+        }));
+        const wsKhata = XLSX.utils.json_to_sheet(
+          khataRows.length
+            ? khataRows
+            : [
+                {
+                  'Customer Name': 'Sample Customer',
+                  'Mobile Number': '9876543210',
+                  'Address': '-',
+                  'Credit Limit (₹)': 5000,
+                  'Current Khata Due (₹)': 0,
+                  'Status': 'CLEAR',
+                  'Created Date': dateStr,
+                },
+              ]
+        );
+        XLSX.utils.book_append_sheet(wb, wsKhata, 'Customers & Khata');
+      }
+
+      const filename = `pandit_pos_${type}_${shop.code || 'MAIN'}_${dateStr}.${format}`;
+      XLSX.writeFile(wb, filename, { bookType: format });
+
+      setStatusMessage({
+        type: 'success',
+        text: `Downloaded offline spreadsheet: ${filename}`,
+      });
+    } catch (err: any) {
+      console.error('Error generating spreadsheet:', err);
+      setStatusMessage({
+        type: 'error',
+        text: `Failed to generate offline spreadsheet: ${err.message}`,
+      });
+    }
+  };
+
+  // Download Fresh Blank Template (No demo rows, headers only for clean software setup)
+  const handleDownloadBlankTemplate = (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const headers = [
+        {
+          'Barcode': '',
+          'Product Name': '',
+          'Category': '',
+          'Unit': 'pcs',
+          'Purchase Price': '',
+          'MRP': '',
+          'Selling Price': '',
+          'GST Rate': 18,
+          'Stock Qty': '',
+          'Low Stock Threshold': 10,
+        },
+      ];
+      const ws = XLSX.utils.json_to_sheet(headers);
+      XLSX.utils.book_append_sheet(wb, ws, 'Catalog Template');
+      const filename = `pandit_pos_fresh_blank_catalog_template.${format}`;
+      XLSX.writeFile(wb, filename, { bookType: format });
+      setStatusMessage({
+        type: 'success',
+        text: `Downloaded fresh blank template (${filename}). Add your products and upload!`,
+      });
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Failed to download blank template: ${err.message}`,
+      });
+    }
+  };
+
+  // Clean Slate: Clear existing products in current shop so user can start fresh
+  const handleClearShopProducts = () => {
+    if (
+      window.confirm(
+        `Are you sure you want to clear all ${products.length} products in "${shop.name}"? This allows you to start fresh with a clean catalog.`
+      )
+    ) {
+      StorageService.clearShopProducts(shop.id);
+      onRefreshData();
+      setStatusMessage({
+        type: 'success',
+        text: `Cleared catalog for ${shop.name}. Ready for fresh product upload.`,
+      });
+    }
+  };
+
+  // Import mode: merge or replace
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
 
   // Import from Google Sheet handler
   const handleLoadImportPreview = async () => {
@@ -243,19 +445,24 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
   const handleConfirmImport = () => {
     if (!importPreview.products.length) return;
 
+    if (importMode === 'replace') {
+      StorageService.clearShopProducts(shop.id);
+    }
+
     let updatedCount = 0;
     let addedCount = 0;
 
     importPreview.products.forEach((parsed) => {
       if (!parsed.name) return;
 
-      const existing = products.find(
+      const currentShopProducts = StorageService.getProducts(shop.id);
+      const existing = currentShopProducts.find(
         (p) =>
           (parsed.barcode && p.barcode === parsed.barcode) ||
           p.name.toLowerCase() === parsed.name?.toLowerCase()
       );
 
-      if (existing) {
+      if (existing && importMode === 'merge') {
         StorageService.saveProduct({
           ...existing,
           stockQty: parsed.stockQty !== undefined ? parsed.stockQty : existing.stockQty,
@@ -270,8 +477,8 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
           shopId: shop.id,
           name: parsed.name,
           barcode: parsed.barcode || `BC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          category: parsed.category || 'General Fireworks',
-          unit: parsed.unit || 'box',
+          category: parsed.category || 'General',
+          unit: parsed.unit || 'pcs',
           purchasePrice: parsed.purchasePrice || 0,
           sellingPrice: parsed.sellingPrice || 0,
           mrp: parsed.mrp || (parsed.sellingPrice ? Math.round(parsed.sellingPrice * 1.2) : 0),
@@ -288,7 +495,10 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
     setImportPreview({ isOpen: false, products: [] });
     setStatusMessage({
       type: 'success',
-      text: `Import Completed! ${updatedCount} products updated with new stock/pricing, ${addedCount} new products added to ${shop.name}.`,
+      text:
+        importMode === 'replace'
+          ? `Fresh Upload Complete! Loaded ${addedCount} products into fresh catalog for ${shop.name}.`
+          : `Import Completed! ${updatedCount} products updated, ${addedCount} new products added to ${shop.name}.`,
     });
   };
 
@@ -513,23 +723,34 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => handleTriggerExport('all')}
-            disabled={!hasAuthToken || isSyncing !== null}
-            className="w-full mt-4 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {isSyncing === 'all' ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Exporting All Tabs...</span>
-              </>
-            ) : (
-              <>
-                <FileCheck className="w-3.5 h-3.5" />
-                <span>Export Master Store Sheet</span>
-              </>
-            )}
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              onClick={() => handleTriggerExport('all')}
+              disabled={!hasAuthToken || isSyncing !== null}
+              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isSyncing === 'all' ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Exporting to Google Sheets...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Sync to Google Sheets</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleDownloadExcel('all', 'xlsx')}
+              title="Download full 3-tab workbook as .xlsx without needing Google login"
+              className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Download Offline Excel (.xlsx)</span>
+            </button>
+          </div>
         </div>
 
         {/* 2. Inventory & Stock Export */}
@@ -561,23 +782,42 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => handleTriggerExport('inventory', selectedSpreadsheetId || undefined)}
-            disabled={!hasAuthToken || isSyncing !== null}
-            className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {isSyncing === 'inventory' ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Exporting Inventory...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Export Inventory Sheet</span>
-              </>
-            )}
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              onClick={() => handleTriggerExport('inventory', selectedSpreadsheetId || undefined)}
+              disabled={!hasAuthToken || isSyncing !== null}
+              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isSyncing === 'inventory' ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Exporting Inventory...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Sync to Google Sheets</span>
+                </>
+              )}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleDownloadExcel('inventory', 'xlsx')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={() => handleDownloadExcel('inventory', 'csv')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 3. Sales & Invoices Export */}
@@ -609,23 +849,42 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => handleTriggerExport('sales', selectedSpreadsheetId || undefined)}
-            disabled={!hasAuthToken || isSyncing !== null}
-            className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {isSyncing === 'sales' ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Exporting Sales...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5 text-amber-400" />
-                <span>Export Sales Register</span>
-              </>
-            )}
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              onClick={() => handleTriggerExport('sales', selectedSpreadsheetId || undefined)}
+              disabled={!hasAuthToken || isSyncing !== null}
+              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isSyncing === 'sales' ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Exporting Sales...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Sync to Google Sheets</span>
+                </>
+              )}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleDownloadExcel('sales', 'xlsx')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-600" />
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={() => handleDownloadExcel('sales', 'csv')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 4. Khata & Customers Export */}
@@ -657,51 +916,117 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => handleTriggerExport('khata', selectedSpreadsheetId || undefined)}
-            disabled={!hasAuthToken || isSyncing !== null}
-            className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {isSyncing === 'khata' ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Exporting Khata...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5 text-purple-400" />
-                <span>Export Khata Ledger</span>
-              </>
-            )}
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              onClick={() => handleTriggerExport('khata', selectedSpreadsheetId || undefined)}
+              disabled={!hasAuthToken || isSyncing !== null}
+              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isSyncing === 'khata' ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Exporting Khata...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Sync to Google Sheets</span>
+                </>
+              )}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleDownloadExcel('khata', 'xlsx')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-purple-600" />
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={() => handleDownloadExcel('khata', 'csv')}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 5. Import Stock / Prices from Google Sheet */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all md:col-span-2">
+        {/* 5. Clean Software Setup & Blank Templates */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all">
+          <div className="space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+              <Sparkles className="w-5 h-5" />
+            </div>
+
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm">Clean Blank Templates &amp; Fresh Upload</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Upload your own product catalog without any dummy data or pre-existing records.
+              </p>
+            </div>
+
+            <div className="bg-teal-50/70 border border-teal-200/80 rounded-lg p-2.5 text-[11px] text-teal-900 space-y-1">
+              <div>✓ Download pristine blank spreadsheets</div>
+              <div>✓ Fill your store's barcodes and prices</div>
+              <div>✓ Upload directly via Excel or Google Sheets</div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleDownloadBlankTemplate('xlsx')}
+                className="py-2 px-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Blank .XLSX</span>
+              </button>
+              <button
+                onClick={() => handleDownloadBlankTemplate('csv')}
+                className="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>Blank .CSV</span>
+              </button>
+            </div>
+
+            <button
+              onClick={handleClearShopProducts}
+              className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3 h-3 text-rose-500" />
+              <span>Clear Shop Catalog (Start Fresh)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 6. Import Stock / Prices from Google Sheet */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all md:col-span-2 lg:col-span-1">
           <div className="space-y-3">
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
               <Upload className="w-5 h-5" />
             </div>
 
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">Import & Update Catalog from Google Sheet</h3>
+              <h3 className="font-bold text-slate-900 text-sm">Import from Google Sheet</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Have you updated prices, stock quantities, or added new fireworks in Google Sheets? Select the sheet
-                above and click preview to sync the changes directly into PANDIT POS.
+                Sync product prices, stock, or new barcodes from your Google Drive spreadsheet directly into PANDIT POS.
               </p>
             </div>
 
-            <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-xs text-amber-800">
-              <strong>How it works:</strong> The importer matches items by Barcode or Product Name. If an item matches, its
-              stock quantity and selling price will be updated. If it’s a new barcode, it will be added to your inventory.
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-2.5 text-[11px] text-amber-800">
+              Supports both <strong>Merge / Update</strong> and <strong>Clean Slate Replace</strong> modes.
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 space-y-2">
             <button
               onClick={handleLoadImportPreview}
               disabled={!hasAuthToken || !selectedSpreadsheetId || isSyncing !== null}
-              className="py-2.5 px-5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              className="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
             >
               {isSyncing === 'import' ? (
                 <>
@@ -711,21 +1036,21 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
               ) : (
                 <>
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Preview & Import from Selected Sheet</span>
+                  <span>Preview &amp; Import Sheet</span>
                 </>
               )}
             </button>
 
             {!selectedSpreadsheetId && (
-              <span className="text-[11px] text-slate-500 italic">
-                * Select a target spreadsheet above first
+              <span className="text-[10px] text-slate-500 italic block text-center">
+                * Select target spreadsheet above first
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Mandatory User Confirmation Dialog (Compliance with Workspace integration skill) */}
+      {/* Mandatory User Confirmation Dialog */}
       {confirmDialog && confirmDialog.isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
@@ -777,11 +1102,34 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Review the products parsed from your Google Sheet below before applying them to{' '}
-              <strong>{shop.name}</strong>. Existing items with matching barcodes or names will have their stock and
-              prices updated.
-            </p>
+            {/* Mode Selector: Merge vs Clean Slate Replace */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <span className="font-bold text-slate-800">Upload Action Mode:</span>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    value="merge"
+                    checked={importMode === 'merge'}
+                    onChange={() => setImportMode('merge')}
+                    className="text-orange-600"
+                  />
+                  <span className="font-medium text-slate-700">Merge &amp; Update Existing</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    value="replace"
+                    checked={importMode === 'replace'}
+                    onChange={() => setImportMode('replace')}
+                    className="text-rose-600"
+                  />
+                  <span className="font-bold text-rose-700">Clean Slate (Replace Entire Catalog)</span>
+                </label>
+              </div>
+            </div>
 
             <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
               <table className="w-full text-left text-xs">
@@ -817,7 +1165,7 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
 
             <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
               <span className="text-xs text-slate-500">
-                Ready to sync into <strong>{shop.name}</strong> database
+                Target Shop: <strong>{shop.name}</strong>
               </span>
 
               <div className="flex items-center gap-2">
@@ -831,9 +1179,15 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleConfirmImport}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer"
+                  className={`px-5 py-2 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer ${
+                    importMode === 'replace'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
                 >
-                  Confirm & Apply to POS Inventory
+                  {importMode === 'replace'
+                    ? 'Confirm Clean Slate Replacement'
+                    : 'Confirm & Apply to POS Inventory'}
                 </button>
               </div>
             </div>

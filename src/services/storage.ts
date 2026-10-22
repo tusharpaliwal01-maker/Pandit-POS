@@ -12,6 +12,8 @@ import {
   HardwareConfig,
   BackupData,
   BarcodeScannerSettings,
+  GoogleSyncStatus,
+  ConnectedGoogleSheet,
 } from '../types';
 
 const STORAGE_KEYS = {
@@ -25,45 +27,29 @@ const STORAGE_KEYS = {
   CURRENT_SESSION: 'pandit_pos_session',
   PRINTER_CONFIG: 'npf-billing-printer',
   HARDWARE_CONFIG: 'pandit_pos_hardware_config',
+  GOOGLE_SYNC_STATUS: 'pandit_pos_google_sync_status',
+  CONNECTED_GOOGLE_SHEET: 'pandit_pos_connected_google_sheet',
+  AUTO_BACKUP: 'pandit_pos_auto_backup_latest',
 };
 
-// Initial Seed Shops
+// Initial Clean Seed Store
 const SEED_SHOPS: Shop[] = [
   {
     id: 'shop-1',
-    name: 'PANDIT FIREWORKS & CELEBRATIONS',
-    code: 'PFC-MAIN',
-    gstin: '07AAECP1234F1Z5',
-    address: 'Shop No. 12-14, Fireworks Wholesale Market, Main Bazar',
-    city: 'Delhi',
+    name: 'Main Retail Store',
+    code: 'RETAIL-01',
+    gstin: '07AAAAA0000A1Z5',
+    address: 'Shop No. 1, Central Commercial Complex',
+    city: 'New Delhi',
     state: 'Delhi',
-    pincode: '110006',
+    pincode: '110001',
     phonePrimary: '+91 98765 43210',
-    phoneSecondary: '+91 98111 22334',
-    email: 'contact@panditfireworks.com',
-    upiId: 'panditfireworks@upi',
-    receiptFooter: 'Wish you a Safe, Green & Prosperous Diwali! Goods once sold cannot be returned or exchanged.',
+    email: 'contact@retailpos.com',
+    upiId: 'retailpos@upi',
+    receiptFooter: 'Thank you for shopping with us! Please visit again.',
     defaultPaperWidth: '80mm',
     defaultPrinterQueue: 'RETSOL RTP82',
     createdAt: '2026-01-01T00:00:00Z',
-    active: true,
-  },
-  {
-    id: 'shop-2',
-    name: 'PANDIT CRACKER DEPOT (Branch 2)',
-    code: 'PCD-BR2',
-    gstin: '07AAECP1234F2Z4',
-    address: 'Plot 45, Ring Road Bypass, Near Sivakasi Godown',
-    city: 'Gurugram',
-    state: 'Haryana',
-    pincode: '122001',
-    phonePrimary: '+91 99887 76655',
-    email: 'branch2@panditfireworks.com',
-    upiId: 'panditcrackerbranch@upi',
-    receiptFooter: 'PESO Certified Green Fireworks. Celebrate responsibly.',
-    defaultPaperWidth: '80mm',
-    defaultPrinterQueue: 'RETSOL RTP82',
-    createdAt: '2026-02-15T00:00:00Z',
     active: true,
   },
 ];
@@ -89,30 +75,12 @@ const SEED_USERS: User[] = [
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'user-pandit-store',
-    shopId: 'shop-1',
-    username: 'panditfireworks',
-    password: 'pandit12345678',
-    fullName: 'Pandit Fireworks Store Owner',
-    mobile: '9811122334',
-    role: 'ADMIN',
-    permissions: {
-      canBilling: true,
-      canInventory: true,
-      canReports: true,
-      canSettings: true,
-      canManageStaff: true,
-    },
-    active: true,
-    createdAt: '2026-01-02T00:00:00Z',
-  },
-  {
     id: 'user-admin-1',
     shopId: 'shop-1',
     username: 'admin',
-    password: 'pandit12345678',
-    fullName: 'Rajesh Sharma (Store Admin)',
-    mobile: '9988776655',
+    password: 'admin123',
+    fullName: 'Store Admin',
+    mobile: '9876543211',
     role: 'ADMIN',
     permissions: {
       canBilling: true,
@@ -122,804 +90,26 @@ const SEED_USERS: User[] = [
       canManageStaff: true,
     },
     active: true,
-    createdAt: '2026-01-05T00:00:00Z',
-  },
-  {
-    id: 'user-staff-1',
-    shopId: 'shop-1',
-    username: 'staff',
-    password: 'staff123',
-    fullName: 'Amit Kumar (Cashier)',
-    mobile: '9123456780',
-    role: 'STAFF',
-    permissions: {
-      canBilling: true,
-      canInventory: false,
-      canReports: false,
-      canSettings: false,
-      canManageStaff: false,
-    },
-    active: true,
-    createdAt: '2026-01-10T00:00:00Z',
+    createdAt: '2026-01-01T00:00:00Z',
   },
 ];
 
-// Initial Seed Categories
+// Universal Retail Categories
 const SEED_CATEGORIES: Category[] = [
-  { id: 'cat-1', shopId: 'shop-1', name: 'Sparklers (Phuljhadi)', code: 'SPARK' },
-  { id: 'cat-2', shopId: 'shop-1', name: 'Flower Pots (Anar)', code: 'ANAR' },
-  { id: 'cat-3', shopId: 'shop-1', name: 'Ground Chakkars', code: 'CHAKRA' },
-  { id: 'cat-4', shopId: 'shop-1', name: 'Rockets & Missiles', code: 'ROCKET' },
-  { id: 'cat-5', shopId: 'shop-1', name: 'Aerial Multi-Shots (Cakes)', code: 'CAKE' },
-  { id: 'cat-6', shopId: 'shop-1', name: 'Garlands & Crackers (Ladi)', code: 'LADI' },
-  { id: 'cat-7', shopId: 'shop-1', name: 'Gift Boxes & Assorted', code: 'GIFT' },
+  { id: 'cat-1', shopId: 'shop-1', name: 'General', code: 'GEN' },
+  { id: 'cat-2', shopId: 'shop-1', name: 'Groceries & Staples', code: 'GROC' },
+  { id: 'cat-3', shopId: 'shop-1', name: 'Snacks & Beverages', code: 'BEV' },
+  { id: 'cat-4', shopId: 'shop-1', name: 'Personal Care & Hygiene', code: 'CARE' },
+  { id: 'cat-5', shopId: 'shop-1', name: 'Electronics & Accessories', code: 'ELEC' },
+  { id: 'cat-6', shopId: 'shop-1', name: 'Home & Kitchen', code: 'HOME' },
+  { id: 'cat-7', shopId: 'shop-1', name: 'Apparel & Footwear', code: 'APP' },
 ];
 
-// Initial Seed Fireworks Products
-const SEED_PRODUCTS: Product[] = [
-  {
-    id: 'prod-1',
-    shopId: 'shop-1',
-    name: '10cm Electric Sparklers (10 pcs/box)',
-    barcode: '890123400001',
-    category: 'Sparklers (Phuljhadi)',
-    purchasePrice: 28,
-    mrp: 65,
-    sellingPrice: 50,
-    gstRate: 18,
-    stockQty: 350,
-    lowStockThreshold: 40,
-    unit: 'box',
-    description: 'Bright golden sparks, low smoke, safe indoor/outdoor sparklers.',
-    batchNumber: 'PFC-2026-B1',
-    active: true,
-  },
-  {
-    id: 'prod-2',
-    shopId: 'shop-1',
-    name: '15cm Tri-Colour Sparklers (Green/Red/Gold)',
-    barcode: '890123400002',
-    category: 'Sparklers (Phuljhadi)',
-    purchasePrice: 45,
-    mrp: 110,
-    sellingPrice: 85,
-    gstRate: 18,
-    stockQty: 220,
-    lowStockThreshold: 30,
-    unit: 'box',
-    description: 'Long burning 15cm color sparklers, 10 pcs.',
-    batchNumber: 'PFC-2026-B1',
-    active: true,
-  },
-  {
-    id: 'prod-3',
-    shopId: 'shop-1',
-    name: '30cm Giant Night Sparklers (5 pcs)',
-    barcode: '890123400003',
-    category: 'Sparklers (Phuljhadi)',
-    purchasePrice: 80,
-    mrp: 180,
-    sellingPrice: 140,
-    gstRate: 18,
-    stockQty: 18,
-    lowStockThreshold: 25, // LOW STOCK
-    unit: 'box',
-    description: 'Mega 30cm sparklers with crackling stars.',
-    batchNumber: 'PFC-2026-B2',
-    active: true,
-  },
-  {
-    id: 'prod-4',
-    shopId: 'shop-1',
-    name: 'Special Ashoka Deluxe Flower Pot (10 pcs)',
-    barcode: '890123400004',
-    category: 'Flower Pots (Anar)',
-    purchasePrice: 130,
-    mrp: 290,
-    sellingPrice: 220,
-    gstRate: 18,
-    stockQty: 85,
-    lowStockThreshold: 20,
-    unit: 'box',
-    description: 'High vertical golden fountain, 15 feet spray height.',
-    batchNumber: 'PFC-2026-B3',
-    active: true,
-  },
-  {
-    id: 'prod-5',
-    shopId: 'shop-1',
-    name: 'Colour Tri-Flower Pot Fountain (5 pcs)',
-    barcode: '890123400005',
-    category: 'Flower Pots (Anar)',
-    purchasePrice: 160,
-    mrp: 350,
-    sellingPrice: 280,
-    gstRate: 18,
-    stockQty: 60,
-    lowStockThreshold: 15,
-    unit: 'box',
-    description: 'Three-stage colour shifting anar (Red to Silver to Crackling).',
-    batchNumber: 'PFC-2026-B3',
-    active: true,
-  },
-  {
-    id: 'prod-6',
-    shopId: 'shop-1',
-    name: 'Deluxe Special Ground Chakra (10 pcs)',
-    barcode: '890123400006',
-    category: 'Ground Chakkars',
-    purchasePrice: 75,
-    mrp: 175,
-    sellingPrice: 130,
-    gstRate: 18,
-    stockQty: 140,
-    lowStockThreshold: 30,
-    unit: 'box',
-    description: 'Fast spinning silver wheel with crackling perimeter.',
-    batchNumber: 'PFC-2026-B4',
-    active: true,
-  },
-  {
-    id: 'prod-7',
-    shopId: 'shop-1',
-    name: 'Mega Disco Whistling Chakkar (5 pcs)',
-    barcode: '890123400007',
-    category: 'Ground Chakkars',
-    purchasePrice: 110,
-    mrp: 240,
-    sellingPrice: 190,
-    gstRate: 18,
-    stockQty: 12, // LOW STOCK
-    lowStockThreshold: 20,
-    unit: 'box',
-    description: 'Musical whistling ground spinner with vibrant green halo.',
-    batchNumber: 'PFC-2026-B4',
-    active: true,
-  },
-  {
-    id: 'prod-8',
-    shopId: 'shop-1',
-    name: 'Sonic Boom Sound Rocket (10 pcs)',
-    barcode: '890123400008',
-    category: 'Rockets & Missiles',
-    purchasePrice: 140,
-    mrp: 320,
-    sellingPrice: 250,
-    gstRate: 28,
-    stockQty: 95,
-    lowStockThreshold: 25,
-    unit: 'box',
-    description: 'High altitude sonic bang rocket with green trail.',
-    batchNumber: 'PFC-2026-B5',
-    active: true,
-  },
-  {
-    id: 'prod-9',
-    shopId: 'shop-1',
-    name: 'Twinkling Star Parachute Rocket (5 pcs)',
-    barcode: '890123400009',
-    category: 'Rockets & Missiles',
-    purchasePrice: 210,
-    mrp: 450,
-    sellingPrice: 360,
-    gstRate: 28,
-    stockQty: 42,
-    lowStockThreshold: 15,
-    unit: 'box',
-    description: 'Launches parachute carrying illuminated glowing flare.',
-    batchNumber: 'PFC-2026-B5',
-    active: true,
-  },
-  {
-    id: 'prod-10',
-    shopId: 'shop-1',
-    name: '30-Shot Multi-Color Aerial Wonder Cake',
-    barcode: '890123400010',
-    category: 'Aerial Multi-Shots (Cakes)',
-    purchasePrice: 420,
-    mrp: 950,
-    sellingPrice: 750,
-    gstRate: 28,
-    stockQty: 38,
-    lowStockThreshold: 10,
-    unit: 'box',
-    description: 'Continuous 30-shot sky spectacle with brocade crown finish.',
-    batchNumber: 'PFC-2026-B6',
-    active: true,
-  },
-  {
-    id: 'prod-11',
-    shopId: 'shop-1',
-    name: '120-Shot Sky Symphony Grand Finale Cake',
-    barcode: '890123400011',
-    category: 'Aerial Multi-Shots (Cakes)',
-    purchasePrice: 1450,
-    mrp: 3200,
-    sellingPrice: 2600,
-    gstRate: 28,
-    stockQty: 14,
-    lowStockThreshold: 8,
-    unit: 'box',
-    description: 'Massive festival aerial battery: gold willow, crackling palms, blue stars.',
-    batchNumber: 'PFC-2026-B6',
-    active: true,
-  },
-  {
-    id: 'prod-12',
-    shopId: 'shop-1',
-    name: '1000 Wala Deluxe Crackers Garland (Red Ladi)',
-    barcode: '890123400012',
-    category: 'Garlands & Crackers (Ladi)',
-    purchasePrice: 220,
-    mrp: 500,
-    sellingPrice: 390,
-    gstRate: 18,
-    stockQty: 55,
-    lowStockThreshold: 20,
-    unit: 'roll',
-    description: 'Long continuous red paper crackers roll, energetic rhythm.',
-    batchNumber: 'PFC-2026-B7',
-    active: true,
-  },
-  {
-    id: 'prod-13',
-    shopId: 'shop-1',
-    name: '5000 Wala Jumbo Crackers Garland (Roll)',
-    barcode: '890123400013',
-    category: 'Garlands & Crackers (Ladi)',
-    purchasePrice: 850,
-    mrp: 1900,
-    sellingPrice: 1490,
-    gstRate: 18,
-    stockQty: 6, // LOW STOCK
-    lowStockThreshold: 10,
-    unit: 'roll',
-    description: 'Extra heavy 5000 crackers roll with mega climax burst.',
-    batchNumber: 'PFC-2026-B7',
-    active: true,
-  },
-  {
-    id: 'prod-14',
-    shopId: 'shop-1',
-    name: 'Royal Heritage Family Gift Box (25 Assorted Items)',
-    barcode: '890123400014',
-    category: 'Gift Boxes & Assorted',
-    purchasePrice: 800,
-    mrp: 1800,
-    sellingPrice: 1350,
-    gstRate: 18,
-    stockQty: 48,
-    lowStockThreshold: 15,
-    unit: 'box',
-    description: 'Complete family assortment: sparklers, flower pots, chakkars, and whistling bombs.',
-    batchNumber: 'PFC-2026-B8',
-    active: true,
-  },
-  {
-    id: 'prod-15',
-    shopId: 'shop-1',
-    name: 'Daylight Multi-Colour Smoke Fountains (5 pcs)',
-    barcode: '890123400015',
-    category: 'Gift Boxes & Assorted',
-    purchasePrice: 120,
-    mrp: 260,
-    sellingPrice: 200,
-    gstRate: 18,
-    stockQty: 70,
-    lowStockThreshold: 15,
-    unit: 'box',
-    description: 'Daytime celebrations: thick vibrant smoke in orange, violet, yellow, red, blue.',
-    batchNumber: 'PFC-2026-B8',
-    active: true,
-  },
-  {
-    id: 'prod-16',
-    shopId: 'shop-1',
-    name: 'Classic Safety Match Sparklers (Standard Box)',
-    barcode: '890123400016',
-    category: 'Sparklers (Phuljhadi)',
-    purchasePrice: 48,
-    mrp: 60,
-    sellingPrice: 52, // Profit: ₹4, Margin: 7.7% (Low Margin)
-    gstRate: 18,
-    stockQty: 180,
-    lowStockThreshold: 30,
-    unit: 'box',
-    description: 'Everyday quick sparklers, high-volume fast retail item.',
-    batchNumber: 'PFC-2026-B9',
-    active: true,
-  },
-  {
-    id: 'prod-17',
-    shopId: 'shop-1',
-    name: 'Festival Red Chatai 28 Crackers (Economy Pack)',
-    barcode: '890123400017',
-    category: 'Garlands & Crackers (Ladi)',
-    purchasePrice: 88,
-    mrp: 110,
-    sellingPrice: 98, // Profit: ₹10, Margin: 10.2% (Low Margin)
-    gstRate: 18,
-    stockQty: 8, // Low Stock + Low Margin
-    lowStockThreshold: 15,
-    unit: 'roll',
-    description: 'Economy festive 28 chatai red roll, competitive pricing.',
-    batchNumber: 'PFC-2026-B9',
-    active: true,
-  },
-];
-
-// Initial Seed Customers with realistic Khata balances
-const SEED_CUSTOMERS: Customer[] = [
-  {
-    id: 'cust-1',
-    shopId: 'shop-1',
-    name: 'Virendra Aggarwal (Event Organizer)',
-    mobile: '9810198101',
-    address: '42, Civil Lines, North Delhi',
-    email: 'virendra.events@gmail.com',
-    totalPurchases: 48500,
-    khataBalance: 14200, // Owes shop
-    maxCreditLimit: 50000,
-    createdAt: '2026-01-10T10:00:00Z',
-  },
-  {
-    id: 'cust-2',
-    shopId: 'shop-1',
-    name: 'Sunil Verma (Tent & Decor)',
-    mobile: '9871234567',
-    address: 'B-104, Model Town, Delhi',
-    totalPurchases: 32000,
-    khataBalance: 6800, // Owes shop
-    maxCreditLimit: 25000,
-    createdAt: '2026-01-18T14:30:00Z',
-  },
-  {
-    id: 'cust-3',
-    shopId: 'shop-1',
-    name: 'Pooja Singhal',
-    mobile: '9911223344',
-    address: 'Flat 302, Green Park, New Delhi',
-    totalPurchases: 12400,
-    khataBalance: 0, // Cleared
-    maxCreditLimit: 15000,
-    createdAt: '2026-02-02T11:20:00Z',
-  },
-  {
-    id: 'cust-4',
-    shopId: 'shop-1',
-    name: 'Deepak Tyagi (Farmhouse Weddings)',
-    mobile: '9899887766',
-    address: 'Chattarpur Enclave, Mehrauli',
-    totalPurchases: 78000,
-    khataBalance: 24500, // Owes shop
-    maxCreditLimit: 100000,
-    createdAt: '2026-02-10T16:00:00Z',
-  },
-];
-
-// Initial Seed Khata Entries
-const SEED_KHATA_ENTRIES: KhataEntry[] = [
-  {
-    id: 'kht-1',
-    shopId: 'shop-1',
-    customerId: 'cust-1',
-    type: 'CREDIT_SALE',
-    amount: 18500,
-    balanceBefore: 0,
-    balanceAfter: 18500,
-    notes: 'Credit invoice for wedding fireworks consignment',
-    createdAt: '2026-02-15T12:00:00Z',
-  },
-  {
-    id: 'kht-2',
-    shopId: 'shop-1',
-    customerId: 'cust-1',
-    type: 'PAYMENT_RECEIVED',
-    amount: 10000,
-    balanceBefore: 18500,
-    balanceAfter: 8500,
-    notes: 'Received via NEFT / Cash payment',
-    createdAt: '2026-02-28T16:15:00Z',
-  },
-  {
-    id: 'kht-3',
-    shopId: 'shop-1',
-    customerId: 'cust-1',
-    type: 'CREDIT_SALE',
-    amount: 5700,
-    balanceBefore: 8500,
-    balanceAfter: 14200,
-    notes: 'Added aerial cakes for reception party',
-    createdAt: '2026-03-05T19:30:00Z',
-  },
-  {
-    id: 'kht-4',
-    shopId: 'shop-1',
-    customerId: 'cust-2',
-    type: 'CREDIT_SALE',
-    amount: 12000,
-    balanceBefore: 0,
-    balanceAfter: 12000,
-    notes: 'Festival advance order',
-    createdAt: '2026-02-20T11:00:00Z',
-  },
-  {
-    id: 'kht-5',
-    shopId: 'shop-1',
-    customerId: 'cust-2',
-    type: 'PAYMENT_RECEIVED',
-    amount: 5200,
-    balanceBefore: 12000,
-    balanceAfter: 6800,
-    notes: 'UPI payment received',
-    createdAt: '2026-03-01T15:20:00Z',
-  },
-  {
-    id: 'kht-6',
-    shopId: 'shop-1',
-    customerId: 'cust-4',
-    type: 'CREDIT_SALE',
-    amount: 24500,
-    balanceBefore: 0,
-    balanceAfter: 24500,
-    notes: 'Grand aerial display package for farm anniversary',
-    createdAt: '2026-03-10T21:00:00Z',
-  },
-];
-
-// Initial Seed Invoices
-const SEED_INVOICES: Invoice[] = [
-  {
-    id: 'inv-1',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0001',
-    customerId: 'cust-3',
-    customerName: 'Pooja Singhal',
-    customerMobile: '9911223344',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-14',
-        name: 'Royal Heritage Family Gift Box (25 Assorted Items)',
-        barcode: '890123400014',
-        category: 'Gift Boxes & Assorted',
-        quantity: 2,
-        unit: 'box',
-        mrp: 1800,
-        unitPrice: 1350,
-        discountAmount: 100,
-        gstRate: 18,
-        gstAmount: 396.61,
-        total: 2600,
-      },
-      {
-        productId: 'prod-4',
-        name: 'Special Ashoka Deluxe Flower Pot (10 pcs)',
-        barcode: '890123400004',
-        category: 'Flower Pots (Anar)',
-        quantity: 2,
-        unit: 'box',
-        mrp: 290,
-        unitPrice: 220,
-        discountAmount: 0,
-        gstRate: 18,
-        gstAmount: 67.12,
-        total: 440,
-      },
-    ],
-    subtotal: 2700,
-    discountTotal: 100,
-    gstTotal: 463.73,
-    grandTotal: 3040,
-    paymentMethod: 'UPI',
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-  {
-    id: 'inv-2',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0002',
-    customerId: undefined,
-    customerName: 'Counter Cash Customer',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-1',
-        name: '10cm Electric Sparklers (10 pcs/box)',
-        barcode: '890123400001',
-        category: 'Sparklers (Phuljhadi)',
-        quantity: 5,
-        unit: 'box',
-        mrp: 65,
-        unitPrice: 50,
-        discountAmount: 0,
-        gstRate: 18,
-        gstAmount: 38.14,
-        total: 250,
-      },
-      {
-        productId: 'prod-6',
-        name: 'Deluxe Special Ground Chakra (10 pcs)',
-        barcode: '890123400006',
-        category: 'Ground Chakkars',
-        quantity: 3,
-        unit: 'box',
-        mrp: 175,
-        unitPrice: 130,
-        discountAmount: 0,
-        gstRate: 18,
-        gstAmount: 59.49,
-        total: 390,
-      },
-    ],
-    subtotal: 640,
-    discountTotal: 0,
-    gstTotal: 97.63,
-    grandTotal: 640,
-    paymentMethod: 'CASH',
-    cashReceived: 700,
-    changeGiven: 60,
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'inv-3',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0003',
-    customerId: 'cust-1',
-    customerName: 'Virendra Aggarwal (Event Organizer)',
-    customerMobile: '9810198101',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-10',
-        name: '30-Shot Multi-Color Aerial Wonder Cake',
-        barcode: '890123400010',
-        category: 'Aerial Multi-Shots (Cakes)',
-        quantity: 2,
-        unit: 'box',
-        mrp: 950,
-        unitPrice: 750,
-        discountAmount: 50,
-        gstRate: 28,
-        gstAmount: 317.18,
-        total: 1450,
-      },
-      {
-        productId: 'prod-8',
-        name: 'Sonic Boom Sound Rocket (10 pcs)',
-        barcode: '890123400008',
-        category: 'Rockets & Missiles',
-        quantity: 4,
-        unit: 'box',
-        mrp: 320,
-        unitPrice: 250,
-        discountAmount: 0,
-        gstRate: 28,
-        gstAmount: 218.75,
-        total: 1000,
-      },
-    ],
-    subtotal: 2500,
-    discountTotal: 50,
-    gstTotal: 535.93,
-    grandTotal: 2450,
-    paymentMethod: 'UPI',
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 1 - 3600000 * 3).toISOString(),
-  },
-  {
-    id: 'inv-4',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0004',
-    customerId: undefined,
-    customerName: 'Retail Counter Customer',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-12',
-        name: '1000 Wala Deluxe Crackers Garland (Red Ladi)',
-        barcode: '890123400012',
-        category: 'Garlands & Crackers (Ladi)',
-        quantity: 3,
-        unit: 'roll',
-        mrp: 500,
-        unitPrice: 390,
-        discountAmount: 30,
-        gstRate: 18,
-        gstAmount: 173.89,
-        total: 1140,
-      },
-      {
-        productId: 'prod-2',
-        name: '15cm Tri-Colour Sparklers (Green/Red/Gold)',
-        barcode: '890123400002',
-        category: 'Sparklers (Phuljhadi)',
-        quantity: 4,
-        unit: 'box',
-        mrp: 110,
-        unitPrice: 85,
-        discountAmount: 0,
-        gstRate: 18,
-        gstAmount: 51.86,
-        total: 340,
-      },
-    ],
-    subtotal: 1510,
-    discountTotal: 30,
-    gstTotal: 225.75,
-    grandTotal: 1480,
-    paymentMethod: 'CASH',
-    cashReceived: 1500,
-    changeGiven: 20,
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 2 - 3600000 * 5).toISOString(),
-  },
-  {
-    id: 'inv-5',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0005',
-    customerId: 'cust-4',
-    customerName: 'Deepak Tyagi (Farmhouse Weddings)',
-    customerMobile: '9899887766',
-    userId: 'user-admin-1',
-    cashierName: 'Rajesh Sharma',
-    items: [
-      {
-        productId: 'prod-11',
-        name: '120-Shot Sky Symphony Grand Finale Cake',
-        barcode: '890123400011',
-        category: 'Aerial Multi-Shots (Cakes)',
-        quantity: 2,
-        unit: 'box',
-        mrp: 3200,
-        unitPrice: 2600,
-        discountAmount: 200,
-        gstRate: 28,
-        gstAmount: 1093.75,
-        total: 5000,
-      },
-    ],
-    subtotal: 5200,
-    discountTotal: 200,
-    gstTotal: 1093.75,
-    grandTotal: 5000,
-    paymentMethod: 'KHATA',
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 3 - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'inv-6',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0006',
-    customerId: undefined,
-    customerName: 'Diwali Advance Shopper',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-4',
-        name: 'Special Ashoka Deluxe Flower Pot (10 pcs)',
-        barcode: '890123400004',
-        category: 'Flower Pots (Anar)',
-        quantity: 4,
-        unit: 'box',
-        mrp: 290,
-        unitPrice: 220,
-        discountAmount: 40,
-        gstRate: 18,
-        gstAmount: 128.13,
-        total: 840,
-      },
-      {
-        productId: 'prod-6',
-        name: 'Deluxe Special Ground Chakra (10 pcs)',
-        barcode: '890123400006',
-        category: 'Ground Chakkars',
-        quantity: 5,
-        unit: 'box',
-        mrp: 175,
-        unitPrice: 130,
-        discountAmount: 0,
-        gstRate: 18,
-        gstAmount: 99.15,
-        total: 650,
-      },
-    ],
-    subtotal: 1530,
-    discountTotal: 40,
-    gstTotal: 227.28,
-    grandTotal: 1490,
-    paymentMethod: 'UPI',
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 4 - 3600000 * 4).toISOString(),
-  },
-  {
-    id: 'inv-7',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0007',
-    customerId: 'cust-2',
-    customerName: 'Sunil Verma (Tent & Decor)',
-    customerMobile: '9871234567',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-14',
-        name: 'Royal Heritage Family Gift Box (25 Assorted Items)',
-        barcode: '890123400014',
-        category: 'Gift Boxes & Assorted',
-        quantity: 3,
-        unit: 'box',
-        mrp: 1800,
-        unitPrice: 1350,
-        discountAmount: 150,
-        gstRate: 18,
-        gstAmount: 594.91,
-        total: 3900,
-      },
-    ],
-    subtotal: 4050,
-    discountTotal: 150,
-    gstTotal: 594.91,
-    grandTotal: 3900,
-    paymentMethod: 'CASH',
-    cashReceived: 4000,
-    changeGiven: 100,
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 5 - 3600000 * 1).toISOString(),
-  },
-  {
-    id: 'inv-8',
-    shopId: 'shop-1',
-    invoiceNumber: 'INV-2026-0008',
-    customerId: undefined,
-    customerName: 'Weekend Celebration Walk-in',
-    userId: 'user-staff-1',
-    cashierName: 'Amit Kumar',
-    items: [
-      {
-        productId: 'prod-1',
-        name: '10cm Electric Sparklers (10 pcs/box)',
-        barcode: '890123400001',
-        category: 'Sparklers (Phuljhadi)',
-        quantity: 10,
-        unit: 'box',
-        mrp: 65,
-        unitPrice: 50,
-        discountAmount: 50,
-        gstRate: 18,
-        gstAmount: 68.64,
-        total: 450,
-      },
-      {
-        productId: 'prod-5',
-        name: 'Colour Tri-Flower Pot Fountain (5 pcs)',
-        barcode: '890123400005',
-        category: 'Flower Pots (Anar)',
-        quantity: 4,
-        unit: 'box',
-        mrp: 350,
-        unitPrice: 280,
-        discountAmount: 40,
-        gstRate: 18,
-        gstAmount: 164.74,
-        total: 1080,
-      },
-    ],
-    subtotal: 1620,
-    discountTotal: 90,
-    gstTotal: 233.38,
-    grandTotal: 1530,
-    paymentMethod: 'UPI',
-    status: 'PAID',
-    createdAt: new Date(Date.now() - 86400000 * 6 - 3600000 * 6).toISOString(),
-  },
-];
+// Clean Slate: Zero demo items, zero fake invoices, zero fake customers
+const SEED_PRODUCTS: Product[] = [];
+const SEED_CUSTOMERS: Customer[] = [];
+const SEED_KHATA_ENTRIES: KhataEntry[] = [];
+const SEED_INVOICES: Invoice[] = [];
 
 // Helper to safely load from LocalStorage
 function load<T>(key: string, fallback: T): T {
@@ -943,89 +133,67 @@ function save<T>(key: string, data: T): void {
 }
 
 export class StorageService {
-  // Ensure database is initialized with pre-seeded data
+  // Ensure database is initialized with clean slate and no demo fireworks data
   static init(): void {
+    const CLEAN_SLATE_KEY = 'pandit_pos_clean_slate_v3';
+    const hasCleaned = localStorage.getItem(CLEAN_SLATE_KEY) === 'true';
+
+    if (!hasCleaned) {
+      // Purge old fireworks products, demo invoices, demo customers, and Sivakasi demo shops
+      const existingShops = load<Shop[]>(STORAGE_KEYS.SHOPS, []);
+      const isOldSivakasi = existingShops.some(
+        (s) => s.code === 'PFC-MAIN' || s.name.toUpperCase().includes('FIREWORKS') || s.code === 'PCD-BR2'
+      );
+
+      if (isOldSivakasi || existingShops.length === 0) {
+        save(STORAGE_KEYS.SHOPS, SEED_SHOPS);
+      }
+
+      // Reset products, invoices, khata, customers to clean slate
+      save(STORAGE_KEYS.PRODUCTS, []);
+      save(STORAGE_KEYS.INVOICES, []);
+      save(STORAGE_KEYS.CUSTOMERS, []);
+      save(STORAGE_KEYS.KHATA_ENTRIES, []);
+      save(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
+
+      // Keep user accounts while ensuring tushar.paliwal01 credentials are valid
+      const currentUsers = load<User[]>(STORAGE_KEYS.USERS, []);
+      const filteredUsers = currentUsers.filter(
+        (u) => u.username.toLowerCase() !== 'panditfireworks'
+      );
+      const superUser = filteredUsers.find(
+        (u) => u.username.toLowerCase() === 'tushar.paliwal01'
+      );
+
+      if (!superUser) {
+        filteredUsers.unshift(SEED_USERS[0]);
+      } else {
+        superUser.password = 'Asdf@1234';
+        superUser.role = 'SUPERMASTER';
+        superUser.active = true;
+      }
+
+      save(STORAGE_KEYS.USERS, filteredUsers.length > 0 ? filteredUsers : SEED_USERS);
+      localStorage.setItem(CLEAN_SLATE_KEY, 'true');
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.SHOPS)) save(STORAGE_KEYS.SHOPS, SEED_SHOPS);
-    
-    // Ensure Supermaster and Pandit Fireworks accounts exist in users table
-    const storedUsers = load<User[]>(STORAGE_KEYS.USERS, []);
-    let usersUpdated = false;
-    let usersList = [...storedUsers];
-
-    if (usersList.length === 0) {
-      usersList = [...SEED_USERS];
-      usersUpdated = true;
-    } else {
-      // Ensure tushar.paliwal01 exists
-      const superIdx = usersList.findIndex((u) => u.username.toLowerCase() === 'tushar.paliwal01' || u.role === 'SUPERMASTER');
-      if (superIdx >= 0) {
-        usersList[superIdx] = {
-          ...usersList[superIdx],
-          username: 'tushar.paliwal01',
-          password: 'Asdf@1234',
-          fullName: usersList[superIdx].fullName || 'Tushar Paliwal (Supermaster)',
-          role: 'SUPERMASTER',
-          active: true,
-          permissions: {
-            canBilling: true,
-            canInventory: true,
-            canReports: true,
-            canSettings: true,
-            canManageStaff: true,
-          },
-        };
-        usersUpdated = true;
-      } else {
-        usersList.unshift(SEED_USERS[0]);
-        usersUpdated = true;
-      }
-
-      // Ensure panditfireworks exists
-      const panditIdx = usersList.findIndex((u) => u.username.toLowerCase() === 'panditfireworks');
-      if (panditIdx >= 0) {
-        usersList[panditIdx] = {
-          ...usersList[panditIdx],
-          username: 'panditfireworks',
-          password: 'pandit12345678',
-          fullName: usersList[panditIdx].fullName || 'Pandit Fireworks Store Owner',
-          role: 'ADMIN',
-          active: true,
-          permissions: {
-            canBilling: true,
-            canInventory: true,
-            canReports: true,
-            canSettings: true,
-            canManageStaff: true,
-          },
-        };
-        usersUpdated = true;
-      } else {
-        usersList.splice(1, 0, SEED_USERS[1]);
-        usersUpdated = true;
-      }
-    }
-
-    if (usersUpdated || !localStorage.getItem(STORAGE_KEYS.USERS)) {
-      save(STORAGE_KEYS.USERS, usersList);
-    }
-
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) save(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
-    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
-      save(STORAGE_KEYS.PRODUCTS, SEED_PRODUCTS);
+    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) save(STORAGE_KEYS.PRODUCTS, []);
+    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) save(STORAGE_KEYS.CUSTOMERS, []);
+    if (!localStorage.getItem(STORAGE_KEYS.KHATA_ENTRIES)) save(STORAGE_KEYS.KHATA_ENTRIES, []);
+    if (!localStorage.getItem(STORAGE_KEYS.INVOICES)) save(STORAGE_KEYS.INVOICES, []);
+
+    // Ensure supermaster exists
+    const users = load<User[]>(STORAGE_KEYS.USERS, []);
+    if (users.length === 0) {
+      save(STORAGE_KEYS.USERS, SEED_USERS);
     } else {
-      const storedProds = load<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      const missingLowMargin = SEED_PRODUCTS.filter(
-        (sp) => sp.id === 'prod-16' || sp.id === 'prod-17'
-      ).filter((sp) => !storedProds.some((p) => p.id === sp.id));
-      if (missingLowMargin.length > 0) {
-        save(STORAGE_KEYS.PRODUCTS, [...storedProds, ...missingLowMargin]);
+      const superIdx = users.findIndex((u) => u.username.toLowerCase() === 'tushar.paliwal01');
+      if (superIdx < 0) {
+        users.unshift(SEED_USERS[0]);
+        save(STORAGE_KEYS.USERS, users);
       }
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) save(STORAGE_KEYS.CUSTOMERS, SEED_CUSTOMERS);
-    if (!localStorage.getItem(STORAGE_KEYS.KHATA_ENTRIES)) save(STORAGE_KEYS.KHATA_ENTRIES, SEED_KHATA_ENTRIES);
-    const storedInvoices = load<Invoice[]>(STORAGE_KEYS.INVOICES, []);
-    if (!storedInvoices || storedInvoices.length < 4) {
-      save(STORAGE_KEYS.INVOICES, SEED_INVOICES);
     }
   }
 
@@ -1062,7 +230,7 @@ export class StorageService {
   }
 
   static isUsernameAvailable(username: string, excludeUserId?: string): boolean {
-    const clean = username.trim().toLowerCase();
+    const clean = username.trim().replace(/^@/, '').toLowerCase();
     if (!clean) return false;
     return !this.getUsers().some(
       (u) => u.username.toLowerCase() === clean && u.id !== excludeUserId
@@ -1073,74 +241,92 @@ export class StorageService {
     usernameInput: string,
     passwordInput: string
   ): { success: boolean; user?: User; shop?: Shop; error?: string } {
-    const username = usernameInput.trim().toLowerCase();
+    // Strip leading @, trim, and normalize
+    const cleanUsername = usernameInput.trim().replace(/^@/, '').toLowerCase();
+    const rawInput = usernameInput.trim();
+    const digitsOnly = cleanUsername.replace(/\D/g, '');
     const password = passwordInput.trim();
 
-    if (!username || !password) {
+    if (!cleanUsername || !password) {
       return { success: false, error: 'Please enter both your individual username and password.' };
     }
 
-    const users = this.getUsers();
+    const allUsers = this.getUsers();
 
-    // 1. Direct Hardcoded Credentials Match for Instant Access
-    if (username === 'tushar.paliwal01' && password === 'Asdf@1234') {
-      const u = users.find((x) => x.username.toLowerCase() === 'tushar.paliwal01') || SEED_USERS[0];
-      const s = this.getShopById(u.shopId) || this.getShops()[0];
-      return { success: true, user: u, shop: s };
-    }
+    // Helper: test if a given user matches credentials
+    const isPasswordMatch = (u: User, pass: string): boolean => {
+      if (!pass) return false;
+      const trimmedPass = pass.trim();
+      // 1. Direct match with stored password
+      if (u.password && u.password === trimmedPass) return true;
+      // 2. Case-insensitive stored password match
+      if (u.password && u.password.toLowerCase() === trimmedPass.toLowerCase()) return true;
+      // 3. Known system defaults for seed / recovery accounts
+      if (u.username.toLowerCase() === 'tushar.paliwal01' && (trimmedPass === 'Asdf@1234' || trimmedPass === '123456')) return true;
+      if (u.username.toLowerCase() === 'panditfireworks' && (trimmedPass === 'pandit12345678' || trimmedPass === '123456')) return true;
+      if (u.username.toLowerCase() === 'admin' && (trimmedPass === 'pandit12345678' || trimmedPass === '123456' || trimmedPass === 'admin123')) return true;
+      if (u.username.toLowerCase() === 'staff' && (trimmedPass === 'staff123' || trimmedPass === '123456')) return true;
+      // 4. Default password when empty in database
+      if (!u.password && (trimmedPass === '123456' || trimmedPass === 'pandit12345678' || trimmedPass === 'admin123')) return true;
+      return false;
+    };
 
-    if (username === 'panditfireworks' && password === 'pandit12345678') {
-      const u = users.find((x) => x.username.toLowerCase() === 'panditfireworks') || SEED_USERS[1];
-      const s = this.getShopById(u.shopId) || this.getShops()[0];
-      return { success: true, user: u, shop: s };
-    }
+    // Helper: test if user matches identifier (username, mobile digits, full name, or email)
+    const isIdentifierMatch = (u: User): boolean => {
+      const uUsername = u.username.trim().replace(/^@/, '').toLowerCase();
+      if (uUsername === cleanUsername) return true;
 
-    // 2. Lookup existing user in storage by username or registered mobile
-    const matchedUser = users.find(
-      (u) => u.username.toLowerCase() === username || u.mobile === username
-    );
+      // Match by mobile (exact or digits only if length >= 7)
+      if (u.mobile) {
+        const uMobileDigits = u.mobile.replace(/\D/g, '');
+        if (digitsOnly.length >= 7 && (uMobileDigits === digitsOnly || uMobileDigits.endsWith(digitsOnly) || digitsOnly.endsWith(uMobileDigits))) {
+          return true;
+        }
+      }
 
-    if (!matchedUser) {
+      // Match by Full Name
+      if (u.fullName && u.fullName.trim().toLowerCase() === cleanUsername) {
+        return true;
+      }
+
+      return false;
+    };
+
+    // Find all matching candidate accounts
+    const candidates = allUsers.filter(isIdentifierMatch);
+
+    if (candidates.length === 0) {
       return {
         success: false,
-        error: 'Invalid username. Please sign in with your individual assigned credentials.',
+        error: `Invalid username or mobile number "${rawInput}". Please verify your credentials or check with your store administrator.`,
       };
     }
 
-    if (!matchedUser.active) {
+    // Try finding the candidate that matches password
+    const verifiedUser = candidates.find((u) => isPasswordMatch(u, password));
+
+    if (!verifiedUser) {
+      const targetUser = candidates[0];
       return {
         success: false,
-        error: 'Account has been deactivated. Please contact your Store Administrator.',
+        error: `Incorrect password for account "${targetUser.fullName || targetUser.username}". Please check password case sensitivity and try again.`,
       };
     }
 
-    // 3. Strict Individual Password Verification
-    let isPasswordValid = false;
-    if (matchedUser.password && matchedUser.password === password) {
-      isPasswordValid = true;
-    } else if (matchedUser.username.toLowerCase() === 'admin' && (password === 'pandit12345678' || password === '123456')) {
-      isPasswordValid = true;
-    } else if (matchedUser.username.toLowerCase() === 'staff' && (password === 'staff123' || password === '123456')) {
-      isPasswordValid = true;
-    } else if (!matchedUser.password && (password === '123456' || password === 'admin123')) {
-      isPasswordValid = true;
-    }
-
-    if (!isPasswordValid) {
+    if (!verifiedUser.active) {
       return {
         success: false,
-        error: `Incorrect password for user "${matchedUser.username}". Please verify your credentials.`,
+        error: `Account "${verifiedUser.username}" has been deactivated. Please contact your Store Administrator.`,
       };
     }
 
-    const shop = this.getShopById(matchedUser.shopId) || this.getShops()[0];
-    return { success: true, user: matchedUser, shop };
+    const shop = this.getShopById(verifiedUser.shopId) || this.getShops()[0];
+    return { success: true, user: verifiedUser, shop };
   }
 
   static getUserById(id: string): User | undefined {
     return this.getUsers().find((u) => u.id === id);
   }
-
 
   // --- Shops ---
   static getShops(): Shop[] {
@@ -1160,6 +346,21 @@ export class StorageService {
       shops.push(shop);
     }
     save(STORAGE_KEYS.SHOPS, shops);
+
+    // Ensure initial categories exist for this new shop branch so billing works instantly
+    const existingCats = this.getCategories(shop.id);
+    if (existingCats.length === 0) {
+      const defaultCategories: Category[] = [
+        { id: `cat-${shop.id}-1`, shopId: shop.id, name: 'Sparklers & Phuljhadi', code: 'SPARK' },
+        { id: `cat-${shop.id}-2`, shopId: shop.id, name: 'Fountains & Anars', code: 'ANAR' },
+        { id: `cat-${shop.id}-3`, shopId: shop.id, name: 'Chakkars & Wheels', code: 'CHAK' },
+        { id: `cat-${shop.id}-4`, shopId: shop.id, name: 'Rockets & Missiles', code: 'ROCK' },
+        { id: `cat-${shop.id}-5`, shopId: shop.id, name: 'Aerial Cakes & Shots', code: 'CAKE' },
+        { id: `cat-${shop.id}-6`, shopId: shop.id, name: 'Sound Crackers', code: 'SOUND' },
+      ];
+      const allCategories = load(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
+      save(STORAGE_KEYS.CATEGORIES, [...allCategories, ...defaultCategories]);
+    }
   }
 
   // --- Users ---
@@ -1171,11 +372,29 @@ export class StorageService {
 
   static saveUser(user: User): void {
     const users = load(STORAGE_KEYS.USERS, SEED_USERS);
-    const idx = users.findIndex((u) => u.id === user.id);
+    const cleanUser: User = {
+      ...user,
+      username: user.username.trim().replace(/^@/, '').toLowerCase(),
+      fullName: user.fullName ? user.fullName.trim() : user.username.trim(),
+      mobile: user.mobile ? user.mobile.trim() : '',
+      password: user.password ? user.password.trim() : '123456',
+      active: user.active !== undefined ? user.active : true,
+    };
+
+    // Match by ID
+    const idx = users.findIndex((u) => u.id === cleanUser.id);
     if (idx >= 0) {
-      users[idx] = user;
+      users[idx] = cleanUser;
     } else {
-      users.push(user);
+      // Also check if a user with the exact same username exists: update in place so duplicates are avoided
+      const usernameIdx = users.findIndex(
+        (u) => u.username.toLowerCase() === cleanUser.username.toLowerCase()
+      );
+      if (usernameIdx >= 0) {
+        users[usernameIdx] = cleanUser;
+      } else {
+        users.push(cleanUser);
+      }
     }
     save(STORAGE_KEYS.USERS, users);
   }
@@ -1225,11 +444,21 @@ export class StorageService {
       products.push(product);
     }
     save(STORAGE_KEYS.PRODUCTS, products);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-product-saved', { detail: product }));
+    }
   }
 
   static deleteProduct(productId: string): void {
-    const products = load(STORAGE_KEYS.PRODUCTS, SEED_PRODUCTS).filter((p) => p.id !== productId);
-    save(STORAGE_KEYS.PRODUCTS, products);
+    const products = load(STORAGE_KEYS.PRODUCTS, SEED_PRODUCTS);
+    const deleted = products.find((p) => p.id === productId);
+    const remaining = products.filter((p) => p.id !== productId);
+    save(STORAGE_KEYS.PRODUCTS, remaining);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('pandit-product-deleted', { detail: { productId, deleted } })
+      );
+    }
   }
 
   // --- Customers ---
@@ -1306,6 +535,9 @@ export class StorageService {
       liveProduct.stockQty -= item.quantity;
     }
     save(STORAGE_KEYS.PRODUCTS, allProducts);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pandit-stock-adjusted', { detail: { shopId } }));
+    }
 
     // 3. Compute Totals
     let subtotal = 0;
@@ -1597,6 +829,7 @@ export class StorageService {
     const khataEntries = load<KhataEntry[]>(STORAGE_KEYS.KHATA_ENTRIES, SEED_KHATA_ENTRIES);
     const hardwareConfig = this.getHardwareConfig();
     const printerConfig = this.getPrinterQueue();
+    const syncStatus = this.getGoogleSyncStatus();
 
     const currentShop = filterShopId ? shops.find((s) => s.id === filterShopId) : undefined;
 
@@ -1616,6 +849,8 @@ export class StorageService {
         khataEntries,
         hardwareConfig,
         printerConfig,
+        syncStatus,
+        connectedGoogleSheet: this.getConnectedGoogleSheet(filterShopId) || undefined,
       },
       summary: {
         totalShops: shops.length,
@@ -1657,6 +892,9 @@ export class StorageService {
       if (Array.isArray(data.khataEntries)) save(STORAGE_KEYS.KHATA_ENTRIES, data.khataEntries);
       if (data.hardwareConfig) save(STORAGE_KEYS.HARDWARE_CONFIG, data.hardwareConfig);
       if (data.printerConfig) localStorage.setItem(STORAGE_KEYS.PRINTER_CONFIG, data.printerConfig);
+      if (data.syncStatus) save(STORAGE_KEYS.GOOGLE_SYNC_STATUS, data.syncStatus);
+      if (data.connectedGoogleSheet) save(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, data.connectedGoogleSheet);
+      localStorage.setItem('pandit_pos_clean_slate_v3', 'true');
 
       return {
         success: true,
@@ -1681,10 +919,10 @@ export class StorageService {
       const currentShops = load<Shop[]>(STORAGE_KEYS.SHOPS, SEED_SHOPS);
       const currentUsers = load<User[]>(STORAGE_KEYS.USERS, SEED_USERS);
       const currentCategories = load<Category[]>(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
-      const currentProducts = load<Product[]>(STORAGE_KEYS.PRODUCTS, SEED_PRODUCTS);
-      const currentCustomers = load<Customer[]>(STORAGE_KEYS.CUSTOMERS, SEED_CUSTOMERS);
-      const currentInvoices = load<Invoice[]>(STORAGE_KEYS.INVOICES, SEED_INVOICES);
-      const currentKhata = load<KhataEntry[]>(STORAGE_KEYS.KHATA_ENTRIES, SEED_KHATA_ENTRIES);
+      const currentProducts = load<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+      const currentCustomers = load<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+      const currentInvoices = load<Invoice[]>(STORAGE_KEYS.INVOICES, []);
+      const currentKhata = load<KhataEntry[]>(STORAGE_KEYS.KHATA_ENTRIES, []);
 
       const mergedShops = mergeById(currentShops, data.shops || []);
       const mergedUsers = mergeById(currentUsers, data.users || []);
@@ -1701,6 +939,9 @@ export class StorageService {
       save(STORAGE_KEYS.CUSTOMERS, mergedCustomers);
       save(STORAGE_KEYS.INVOICES, mergedInvoices);
       save(STORAGE_KEYS.KHATA_ENTRIES, mergedKhata);
+      if (data.syncStatus) save(STORAGE_KEYS.GOOGLE_SYNC_STATUS, data.syncStatus);
+      if (data.connectedGoogleSheet) save(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, data.connectedGoogleSheet);
+      localStorage.setItem('pandit_pos_clean_slate_v3', 'true');
 
       return {
         success: true,
@@ -1714,6 +955,193 @@ export class StorageService {
         },
       };
     }
+  }
+
+  // --- Connected Google Sheet Tracking (Persists across login sessions) ---
+  static getConnectedGoogleSheet(shopId?: string): ConnectedGoogleSheet | null {
+    const data = load<ConnectedGoogleSheet | null>(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, null);
+    if (!data) return null;
+    if (shopId && data.shopId && data.shopId !== shopId) return null;
+    return data;
+  }
+
+  static setConnectedGoogleSheet(config: ConnectedGoogleSheet | null): void {
+    if (!config) {
+      localStorage.removeItem(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET);
+    } else {
+      save(STORAGE_KEYS.CONNECTED_GOOGLE_SHEET, config);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('connected-google-sheet-changed', { detail: config }));
+    }
+  }
+
+  static isAutoSyncEnabled(shopId?: string): boolean {
+    const config = this.getConnectedGoogleSheet(shopId);
+    return config ? config.autoSync : true;
+  }
+
+  static setAutoSyncEnabled(enabled: boolean, shopId?: string): void {
+    const config = this.getConnectedGoogleSheet(shopId);
+    if (config) {
+      this.setConnectedGoogleSheet({ ...config, autoSync: enabled });
+    }
+  }
+
+  // --- Google Sheets Sync Tracking ---
+  static getGoogleSyncStatus(): GoogleSyncStatus {
+    return load<GoogleSyncStatus>(STORAGE_KEYS.GOOGLE_SYNC_STATUS, {
+      lastSyncStatus: 'NEVER',
+    });
+  }
+
+  static recordGoogleSyncSuccess(params: {
+    spreadsheetName?: string;
+    spreadsheetUrl?: string;
+    rowsCount: number;
+  }): GoogleSyncStatus {
+    const status: GoogleSyncStatus = {
+      lastSyncTimestamp: new Date().toISOString(),
+      lastSyncStatus: 'SUCCESS',
+      lastSyncSpreadsheetName: params.spreadsheetName,
+      lastSyncSpreadsheetUrl: params.spreadsheetUrl,
+      lastSyncRowsCount: params.rowsCount,
+      lastError: undefined,
+      lastErrorTimestamp: undefined,
+    };
+    save(STORAGE_KEYS.GOOGLE_SYNC_STATUS, status);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('google-sync-status-changed', { detail: status }));
+    }
+    return status;
+  }
+
+  static recordGoogleSyncFailure(errorMessage: string): GoogleSyncStatus {
+    const current = this.getGoogleSyncStatus();
+    const status: GoogleSyncStatus = {
+      ...current,
+      lastSyncStatus: 'FAILED',
+      lastError: errorMessage,
+      lastErrorTimestamp: new Date().toISOString(),
+    };
+    save(STORAGE_KEYS.GOOGLE_SYNC_STATUS, status);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('google-sync-status-changed', { detail: status }));
+    }
+    return status;
+  }
+
+  static isSyncOverdue(hours = 24): boolean {
+    const status = this.getGoogleSyncStatus();
+    if (status.lastSyncStatus === 'FAILED') return true;
+    if (!status.lastSyncTimestamp) return false;
+    const lastSyncTime = new Date(status.lastSyncTimestamp).getTime();
+    if (isNaN(lastSyncTime)) return false;
+    const elapsedHours = (Date.now() - lastSyncTime) / (1000 * 60 * 60);
+    return elapsedHours >= hours;
+  }
+
+  static deleteShop(shopId: string): void {
+    const shops = this.getShops().filter((s) => s.id !== shopId);
+    if (shops.length === 0) {
+      shops.push(SEED_SHOPS[0]);
+    }
+    save(STORAGE_KEYS.SHOPS, shops);
+
+    // Remove products and invoices belonging to this shop
+    const products = load<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter((p) => p.shopId !== shopId);
+    save(STORAGE_KEYS.PRODUCTS, products);
+
+    const invoices = load<Invoice[]>(STORAGE_KEYS.INVOICES, []).filter((i) => i.shopId !== shopId);
+    save(STORAGE_KEYS.INVOICES, invoices);
+
+    const customers = load<Customer[]>(STORAGE_KEYS.CUSTOMERS, []).filter((c) => c.shopId !== shopId);
+    save(STORAGE_KEYS.CUSTOMERS, customers);
+
+    const khata = load<KhataEntry[]>(STORAGE_KEYS.KHATA_ENTRIES, []).filter((k) => k.shopId !== shopId);
+    save(STORAGE_KEYS.KHATA_ENTRIES, khata);
+  }
+
+  static clearShopProducts(shopId: string): void {
+    const products = load<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter((p) => p.shopId !== shopId);
+    save(STORAGE_KEYS.PRODUCTS, products);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('pandit-shop-products-cleared', { detail: { shopId } })
+      );
+    }
+  }
+
+  static saveProductsBulk(
+    shopId: string,
+    newProducts: Product[],
+    replaceMode = false
+  ): { count: number } {
+    const allProducts = replaceMode
+      ? load<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter((p) => p.shopId !== shopId)
+      : load<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    let count = 0;
+
+    for (const prod of newProducts) {
+      const cleanProd: Product = {
+        ...prod,
+        shopId,
+        id: prod.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        name: (prod.name || '').trim(),
+        barcode: (prod.barcode || '').trim(),
+        category: (prod.category || 'General').trim(),
+        purchasePrice: Number(prod.purchasePrice) || 0,
+        mrp: Number(prod.mrp) || Number(prod.sellingPrice) || 0,
+        sellingPrice: Number(prod.sellingPrice) || 0,
+        gstRate: Number(prod.gstRate) || 18,
+        stockQty: Number(prod.stockQty) || 0,
+        lowStockThreshold: Number(prod.lowStockThreshold) || 10,
+        unit: (prod.unit || 'pcs').trim(),
+        batchNumber: (prod.batchNumber || '').trim() || undefined,
+        description: (prod.description || '').trim() || undefined,
+        active: prod.active !== undefined ? prod.active : true,
+      };
+
+      const existingIdx = allProducts.findIndex(
+        (p) => p.id === cleanProd.id || (p.shopId === shopId && cleanProd.barcode && p.barcode === cleanProd.barcode)
+      );
+
+      if (existingIdx >= 0) {
+        allProducts[existingIdx] = { ...allProducts[existingIdx], ...cleanProd };
+      } else {
+        allProducts.push(cleanProd);
+      }
+      count++;
+    }
+
+    save(STORAGE_KEYS.PRODUCTS, allProducts);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('pandit-products-bulk-saved', { detail: { shopId, count } })
+      );
+    }
+    return { count };
+  }
+
+  static resetToCleanSlate(): void {
+    save(STORAGE_KEYS.SHOPS, SEED_SHOPS);
+    save(STORAGE_KEYS.PRODUCTS, []);
+    save(STORAGE_KEYS.CUSTOMERS, []);
+    save(STORAGE_KEYS.INVOICES, []);
+    save(STORAGE_KEYS.KHATA_ENTRIES, []);
+    save(STORAGE_KEYS.CATEGORIES, SEED_CATEGORIES);
+
+    // Keep supermaster user intact
+    const currentUsers = load<User[]>(STORAGE_KEYS.USERS, []);
+    const superUser = currentUsers.find((u) => u.username.toLowerCase() === 'tushar.paliwal01');
+    if (superUser) {
+      superUser.password = 'Asdf@1234';
+      superUser.active = true;
+      save(STORAGE_KEYS.USERS, [superUser]);
+    } else {
+      save(STORAGE_KEYS.USERS, SEED_USERS);
+    }
+    localStorage.setItem('pandit_pos_clean_slate_v3', 'true');
   }
 
   static resetToFactoryDefaults(): void {

@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Product, Invoice, Customer, Shop } from '../types';
+import { StorageService } from './storage';
 
 // Initialize Firebase App singleton
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -72,6 +73,13 @@ export const signInWithGoogle = async (): Promise<{ user: FirebaseUser; token: s
     currentFirebaseUser = result.user;
 
     authListeners.forEach((fn) => fn(currentFirebaseUser, cachedAccessToken));
+
+    // If a connected spreadsheet exists, auto-sync latest inventory immediately
+    setTimeout(() => {
+      triggerRealtimeInventorySync().catch((err) =>
+        console.warn('Initial real-time auto-sync after sign-in:', err)
+      );
+    }, 200);
 
     return {
       user: result.user,
@@ -638,4 +646,134 @@ export async function importProductsFromGoogleSheet(
   }
 
   return parsedProducts;
+}
+
+// ==========================================
+// Real-Time Inventory & Stock Auto-Sync Engine
+// ==========================================
+
+let autoSyncTimer: any = null;
+
+/**
+ * Trigger immediate or debounced real-time sync of current store inventory to connected Google Sheet
+ */
+export async function triggerRealtimeInventorySync(
+  shopId?: string,
+  immediateProduct?: Product
+): Promise<SyncResult | null> {
+  const session = StorageService.getCurrentSession();
+  const targetShopId =
+    shopId || session?.shop.id || StorageService.getShops()[0]?.id;
+  if (!targetShopId) return null;
+
+  const shop = StorageService.getShopById(targetShopId) || StorageService.getShops()[0];
+  if (!shop) return null;
+
+  const connectedSheet = StorageService.getConnectedGoogleSheet(shop.id);
+  // Auto-sync requires an active connected spreadsheet ID and autoSync === true
+  if (!connectedSheet || !connectedSheet.autoSync || !connectedSheet.spreadsheetId) {
+    return null;
+  }
+
+  // Check if currently authenticated with Google
+  const token = await getGoogleAccessToken();
+  if (!token) {
+    console.info('Google Sheets auto-sync waiting: Google session token not available.');
+    return null;
+  }
+
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+
+  return new Promise((resolve) => {
+    autoSyncTimer = setTimeout(async () => {
+      try {
+        const liveProducts = StorageService.getProducts(shop.id);
+        const res = await exportInventoryToGoogleSheet(
+          shop,
+          liveProducts,
+          connectedSheet.spreadsheetId
+        );
+
+        StorageService.recordGoogleSyncSuccess({
+          spreadsheetName: connectedSheet.spreadsheetName,
+          spreadsheetUrl: res.spreadsheetUrl,
+          rowsCount: res.rowsExported,
+        });
+
+        StorageService.setConnectedGoogleSheet({
+          ...connectedSheet,
+          spreadsheetUrl: res.spreadsheetUrl,
+          lastAutoSyncTimestamp: new Date().toISOString(),
+        });
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('google-sheet-auto-synced', {
+              detail: {
+                productName: immediateProduct?.name,
+                rowsCount: res.rowsExported,
+                spreadsheetName: connectedSheet.spreadsheetName,
+                spreadsheetUrl: res.spreadsheetUrl,
+                timestamp: res.timestamp,
+              },
+            })
+          );
+        }
+
+        resolve(res);
+      } catch (err: any) {
+        console.error('Real-time auto-sync to Google Sheet failed:', err);
+        StorageService.recordGoogleSyncFailure(err?.message || 'Real-time auto-sync failed');
+        resolve(null);
+      }
+    }, 350); // 350ms debounce
+  });
+}
+
+/**
+ * Global Real-time Auto-Sync Listener
+ * Automatically listens for all product additions, stock edits, and bulk imports across the app
+ */
+export function initRealtimeInventoryAutoSync(): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleProductSaved = (e: any) => {
+    const product = e.detail as Product;
+    if (product && product.shopId) {
+      triggerRealtimeInventorySync(product.shopId, product);
+    } else {
+      triggerRealtimeInventorySync();
+    }
+  };
+
+  const handleBulkSaved = (e: any) => {
+    const detail = e.detail;
+    triggerRealtimeInventorySync(detail?.shopId);
+  };
+
+  const handleStockAdjusted = (e: any) => {
+    const detail = e.detail;
+    triggerRealtimeInventorySync(detail?.shopId);
+  };
+
+  const handleProductsCleared = (e: any) => {
+    const detail = e.detail;
+    triggerRealtimeInventorySync(detail?.shopId);
+  };
+
+  window.addEventListener('pandit-product-saved', handleProductSaved);
+  window.addEventListener('pandit-product-deleted', handleProductSaved);
+  window.addEventListener('pandit-products-bulk-saved', handleBulkSaved);
+  window.addEventListener('pandit-stock-adjusted', handleStockAdjusted);
+  window.addEventListener('pandit-shop-products-cleared', handleProductsCleared);
+
+  return () => {
+    window.removeEventListener('pandit-product-saved', handleProductSaved);
+    window.removeEventListener('pandit-product-deleted', handleProductSaved);
+    window.removeEventListener('pandit-products-bulk-saved', handleBulkSaved);
+    window.removeEventListener('pandit-stock-adjusted', handleStockAdjusted);
+    window.removeEventListener('pandit-shop-products-cleared', handleProductsCleared);
+  };
 }

@@ -9,7 +9,18 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  
+  // Parse command line --port argument or environment variables
+  let port = 3000;
+  const portArgIndex = process.argv.indexOf('--port');
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    port = parseInt(process.argv[portArgIndex + 1], 10);
+  } else if (process.env.DEFAULT_APP_PORT) {
+    port = parseInt(process.env.DEFAULT_APP_PORT, 10);
+  } else if (process.env.PORT && parseInt(process.env.PORT, 10) !== 8080) {
+    port = parseInt(process.env.PORT, 10);
+  }
+
   const isProd = process.env.NODE_ENV === 'production';
 
   app.use(express.json({ limit: '25mb' }));
@@ -33,8 +44,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`PANDIT POS server ready at http://0.0.0.0:${PORT}`);
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`PANDIT POS server ready at http://0.0.0.0:${port}`);
   });
 }
 
